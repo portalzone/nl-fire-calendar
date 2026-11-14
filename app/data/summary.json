@@ -1,0 +1,262 @@
+{
+  "area": "Newfoundland and Labrador",
+  "coverage_end": "2026-11-07",
+  "filters": {
+    "modis_min_confidence": 30,
+    "viirs_confidence": "nominal or high",
+    "type": "0 (presumed vegetation fire); NRT rows have no type and are kept",
+    "fire_cell_size_deg": 0.1
+  },
+  "primary_metric": "cells",
+  "sources": {
+    "modis": {
+      "rows_archive": 6546,
+      "rows_nrt": 3,
+      "archive_last_date": "2026-08-27",
+      "nrt_first_date": "2026-09-02",
+      "gap_days_between_archive_and_nrt": 6,
+      "duplicates_removed": 0,
+      "removed_non_vegetation": {
+        "2": 7,
+        "3": 5
+      },
+      "removed_low_confidence": 1130,
+      "rows_kept": 5407,
+      "first_date": "2001-05-09",
+      "last_date": "2026-09-02"
+    },
+    "n20": {
+      "rows_archive": 9641,
+      "rows_nrt": 11,
+      "archive_last_date": "2026-07-30",
+      "nrt_first_date": "2026-08-01",
+      "gap_days_between_archive_and_nrt": 2,
+      "duplicates_removed": 0,
+      "removed_non_vegetation": {
+        "2": 199,
+        "3": 175
+      },
+      "removed_low_confidence": 429,
+      "rows_kept": 8849,
+      "first_date": "2018-04-13",
+      "last_date": "2026-10-10"
+    },
+    "n21": {
+      "rows_archive": 8381,
+      "rows_nrt": 9,
+      "archive_last_date": "2026-07-29",
+      "nrt_first_date": "2026-08-02",
+      "gap_days_between_archive_and_nrt": 4,
+      "duplicates_removed": 0,
+      "removed_non_vegetation": {
+        "3": 154
+      },
+      "removed_low_confidence": 426,
+      "rows_kept": 7810,
+      "first_date": "2023-04-24",
+      "last_date": "2026-11-05"
+    }
+  },
+  "ratios": {
+    "hotspots": {
+      "k": 5.828373015873016,
+      "n_years": 8,
+      "years": [
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "pearson_r": 0.9076129192199164,
+      "spearman_rho": 0.9523809523809524,
+      "cv_median_pct_err": 66.5856138023637,
+      "cv_mean_abs_err": 313.1238169013011,
+      "leave_one_year_out": [
+        {
+          "year": 2018,
+          "modis": 9.0,
+          "viirs": 25.0,
+          "predicted": 52.7,
+          "abs_err": 27.7,
+          "pct_err": 110.81
+        },
+        {
+          "year": 2019,
+          "modis": 12.0,
+          "viirs": 24.0,
+          "predicted": 70.49,
+          "abs_err": 46.49,
+          "pct_err": 193.72
+        },
+        {
+          "year": 2020,
+          "modis": 30.0,
+          "viirs": 106.0,
+          "predicted": 176.96,
+          "abs_err": 70.96,
+          "pct_err": 66.95
+        },
+        {
+          "year": 2021,
+          "modis": 15.0,
+          "viirs": 40.0,
+          "predicted": 88.14,
+          "abs_err": 48.14,
+          "pct_err": 120.35
+        },
+        {
+          "year": 2022,
+          "modis": 156.0,
+          "viirs": 959.0,
+          "predicted": 900.11,
+          "abs_err": 58.89,
+          "pct_err": 6.14
+        },
+        {
+          "year": 2023,
+          "modis": 187.0,
+          "viirs": 898.0,
+          "predicted": 1133.62,
+          "abs_err": 235.62,
+          "pct_err": 26.24
+        },
+        {
+          "year": 2024,
+          "modis": 289.0,
+          "viirs": 1144.0,
+          "predicted": 1901.61,
+          "abs_err": 757.61,
+          "pct_err": 66.22
+        },
+        {
+          "year": 2025,
+          "modis": 310.0,
+          "viirs": 2679.0,
+          "predicted": 1419.43,
+          "abs_err": 1259.57,
+          "pct_err": 47.02
+        }
+      ]
+    },
+    "cells": {
+      "k": 1.6902985074626866,
+      "n_years": 8,
+      "years": [
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "pearson_r": 0.983527838716643,
+      "spearman_rho": 0.9819277108433735,
+      "cv_median_pct_err": 16.14146722842375,
+      "cv_mean_abs_err": 8.957243113007095,
+      "leave_one_year_out": [
+        {
+          "year": 2018,
+          "modis": 7.0,
+          "viirs": 17.0,
+          "predicted": 11.69,
+          "abs_err": 5.31,
+          "pct_err": 31.21
+        },
+        {
+          "year": 2019,
+          "modis": 9.0,
+          "viirs": 17.0,
+          "predicted": 15.15,
+          "abs_err": 1.85,
+          "pct_err": 10.88
+        },
+        {
+          "year": 2020,
+          "modis": 15.0,
+          "viirs": 31.0,
+          "predicted": 25.02,
+          "abs_err": 5.98,
+          "pct_err": 19.29
+        },
+        {
+          "year": 2021,
+          "modis": 9.0,
+          "viirs": 22.0,
+          "predicted": 14.98,
+          "abs_err": 7.02,
+          "pct_err": 31.92
+        },
+        {
+          "year": 2022,
+          "modis": 46.0,
+          "viirs": 77.0,
+          "predicted": 77.91,
+          "abs_err": 0.91,
+          "pct_err": 1.18
+        },
+        {
+          "year": 2023,
+          "modis": 51.0,
+          "viirs": 78.0,
+          "predicted": 88.13,
+          "abs_err": 10.13,
+          "pct_err": 12.99
+        },
+        {
+          "year": 2024,
+          "modis": 77.0,
+          "viirs": 110.0,
+          "predicted": 138.28,
+          "abs_err": 28.28,
+          "pct_err": 25.71
+        },
+        {
+          "year": 2025,
+          "modis": 54.0,
+          "viirs": 101.0,
+          "predicted": 88.82,
+          "abs_err": 12.18,
+          "pct_err": 12.06
+        }
+      ]
+    }
+  },
+  "month_to_date": {
+    "month": "2026-11",
+    "through_day": 7,
+    "current": 0.0,
+    "historical_median": 0.0,
+    "historical_mean": 0.20833333333333334,
+    "n_past_years": 24,
+    "share_of_past_years_at_or_below": 0.8333333333333334
+  },
+  "noaa21_cross_check": {
+    "years": [
+      2023,
+      2024,
+      2025
+    ],
+    "n21": [
+      948,
+      1407,
+      2482
+    ],
+    "n20": [
+      898,
+      1144,
+      2679
+    ],
+    "ratio_n21_over_n20": 1.0245710654522346
+  },
+  "notes": [
+    "Nov 2000 to Jun 2002 is MODIS Terra only (Aqua starts 2002-07); excluded from baseline.",
+    "Latest month is partial; compare with month_to_date, not the monthly baseline.",
+    "Ratio fitted on May-Sep season totals over 2018-2025."
+  ]
+}
