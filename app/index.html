@@ -663,12 +663,20 @@ function showTab(id){
   state.tab=id;
   for(const t of TABS){const on=t===id,tab=$("tab-"+t);
     tab.setAttribute("aria-selected",on?"true":"false");tab.tabIndex=on?0:-1;$("panel-"+t).hidden=!on;}
+  revealTab(id);
   // a hidden panel has no width, so redraw what lives in the panel that just opened
   if(!SUM)return;
   if(id==="area"){renderHeat();drawMap();}
   else if(id==="compare"){renderCompare();renderAnnual();}
   else if(id==="smoke")renderCO();
   else if(id==="method")renderMethod();
+}
+/* scroll the tab bar (only the bar, not the page) so the tab is fully visible */
+function revealTab(id){
+  const list=$("tablist"),t=$("tab-"+id);if(!list||!t)return;
+  const pad=4,left=t.offsetLeft-list.offsetLeft,right=left+t.offsetWidth;
+  if(left-pad<list.scrollLeft)list.scrollLeft=Math.max(0,left-pad);
+  else if(right+pad>list.scrollLeft+list.clientWidth)list.scrollLeft=right+pad-list.clientWidth;
 }
 /* open a tab and record it in the address, so links and the Back button work */
 function openTab(id){
@@ -689,7 +697,7 @@ function bindTabs(){
     if(next===null)return;
     e.preventDefault();
     for(const t of TABS)$("tab-"+t).tabIndex=-1;
-    const b=$("tab-"+TABS[next]);b.tabIndex=0;b.focus();
+    const b=$("tab-"+TABS[next]);b.tabIndex=0;b.focus({preventScroll:true});revealTab(TABS[next]);
   });
   // when focus leaves the tab list, the open tab is the one tab stop again
   list.addEventListener("focusout",e=>{if(!list.contains(e.relatedTarget))for(const t of TABS)$("tab-"+t).tabIndex=t===state.tab?0:-1;});

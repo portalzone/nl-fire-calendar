@@ -892,3 +892,92 @@ def test_click_on_the_calendar_right_after_typing_a_date_is_not_lost(page):
     page.dispatch_event("#start", "change")
     page.click("#heat button[aria-label^='Jun 2012:']")      # moving focus fires "change" again
     assert page.evaluate("state.sel") == {"y": 2012, "m": 6, "maxDay": 31}
+
+
+# ---------------------------------------------------------------- phone: tab bar and map after a tap
+def phone_page(browser, base, address=""):
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True, device_scale_factor=2)
+    pg = ctx.new_page()
+    pg.errors = []
+    pg.on("pageerror", lambda e: pg.errors.append(str(e)))
+    pg.route("**/data/co_monthly.json*", lambda r: r.fulfill(status=200, content_type="application/json", body=fake_co()))
+    pg.goto(base + address)
+    pg.wait_for_selector(".cell", state="attached")
+    return ctx, pg
+
+
+def tab_inside_bar(pg, name):
+    """Left and right edges of the tab, and of the tab bar's visible box."""
+    return pg.evaluate(f"""() => {{ const t = document.getElementById('tab-{name}').getBoundingClientRect(),
+        b = document.getElementById('tablist').getBoundingClientRect();
+        return [t.left, t.right, b.left, b.right]; }}""")
+
+
+def map_painted(pg):
+    return pg.evaluate("""() => { const c = document.getElementById('map');
+        if (!c.width || !c.clientWidth) return 0;
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; }""")
+
+
+def test_phone_tab_bar_starts_at_the_left_on_load(browser, base):
+    ctx, pg = phone_page(browser, base)
+    assert pg.evaluate("document.getElementById('tablist').scrollLeft") == 0
+    left, right, bl, br = tab_inside_bar(pg, "area")
+    assert left >= bl - 0.5 and right <= br + 0.5
+    ctx.close()
+
+
+@pytest.mark.parametrize("how", ["tap", "keyboard", "link"])
+@pytest.mark.parametrize("tab", TABS)
+def test_phone_open_tab_is_fully_visible_in_the_tab_bar(browser, base, tab, how):
+    if how == "link":
+        ctx, pg = phone_page(browser, base, "#" + tab)
+    else:
+        ctx, pg = phone_page(browser, base)
+        if how == "tap":
+            # start from the far end so the bar has to scroll back for the first tabs
+            pg.tap("#tab-method")
+            pg.tap(f"#tab-{tab}")
+        else:
+            pg.focus("#tab-area")
+            for _ in range(TABS.index(tab)):
+                pg.keyboard.press("ArrowRight")
+            pg.keyboard.press("Enter")
+    pg.wait_for_timeout(100)
+    assert pg.get_attribute(f"#tab-{tab}", "aria-selected") == "true"
+    left, right, bl, br = tab_inside_bar(pg, tab)
+    assert left >= bl - 0.5 and right <= br + 0.5, (tab, how, left, right, bl, br)
+    assert pg.evaluate("document.documentElement.scrollWidth") <= 390
+    assert pg.errors == []
+    ctx.close()
+
+
+@pytest.mark.parametrize("start", [t for t in TABS if t != "area"])
+def test_phone_tap_on_area_tab_draws_the_map(browser, base, start):
+    ctx, pg = phone_page(browser, base, "#" + start)
+    assert pg.is_visible(f"#panel-{start}")
+    pg.tap("#tab-area")
+    pg.wait_for_timeout(100)
+    assert pg.is_visible("#map")
+    assert pg.evaluate("document.getElementById('map').clientWidth") > 250
+    assert map_painted(pg) > 1000
+    ctx.close()
+
+
+@pytest.mark.parametrize("address", ["", "#area"])
+def test_phone_map_is_drawn_on_load_and_from_a_deep_link(browser, base, address):
+    ctx, pg = phone_page(browser, base, address)
+    pg.wait_for_timeout(100)
+    assert pg.evaluate("document.getElementById('map').clientWidth") > 250
+    assert map_painted(pg) > 1000
+    ctx.close()
+
+
+def test_phone_map_is_redrawn_after_a_round_trip_through_every_tab(browser, base):
+    ctx, pg = phone_page(browser, base)
+    for t in ["compare", "smoke", "downloads", "method", "area"]:
+        pg.tap(f"#tab-{t}")
+    pg.wait_for_timeout(100)
+    assert map_painted(pg) > 1000
+    ctx.close()
