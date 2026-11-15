@@ -1612,3 +1612,16 @@ def test_wording_uses_the_sensor_period_not_kind(page):
     assert "years in the same sensor period (MODIS or VIIRS)" in label
     open_tab(page, "method")
     assert "years in the same sensor period (MODIS or VIIRS)" in page.inner_text("#method")
+
+
+@pytest.mark.parametrize("start,end,in_message", [("1990-01", None, True), ("2000-11", "2030-01", True),
+                                                  ("2020-07", "2020-06", False), (None, None, False)])
+def test_allowed_range_is_shown_only_once(page, start, end, in_message):
+    set_dates(page, start=start, end=end)
+    shown = lambda: page.inner_text("#startErr") + page.inner_text("#endErr") + (page.inner_text("#dateRange") if page.is_visible("#dateRange") else "")
+    assert shown().count("Allowed: 2000-11 to 2026-11") == 1
+    assert ("Allowed: 2000-11 to 2026-11" in page.inner_text("#startErr") + page.inner_text("#endErr")) == in_message
+    assert page.is_visible("#dateRange") == (not in_message)
+    if in_message:                          # fixing the date brings the line back
+        set_dates(page, start="2005-01", end="2006-01")
+        assert page.is_visible("#dateRange") and shown().count("Allowed: 2000-11 to 2026-11") == 1

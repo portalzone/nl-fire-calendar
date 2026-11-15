@@ -79,8 +79,8 @@ Say: "Pick a month, and we compare it with the same month in other years. August
 
 **1:15 to 1:30. Your own area and the downloads.**
 Screen: Area and calendar tab, then "2. Choose an area and dates", then the Downloads tab.
-Click: "Area and calendar" tab. Click "Change the area or dates" on the calendar card. In "2. Choose an area and dates", type new numbers in the latitude and longitude boxes, or drag a box on the map. Click "Apply area". Then click the "Downloads" tab.
-Say: "You can choose your own area by typing it or drawing it on the map. Then download the hotspots and the monthly series as CSV, or the charts as pictures."
+Click: "Area and calendar" tab. Click "Change the area or dates" on the calendar card. In "2. Choose an area and dates", type new numbers in the latitude and longitude boxes and click "Apply area and dates", or press "Draw area on map", then drag a box on the map. Then click the "Downloads" tab.
+Say: "You can choose your own area: type it, or press Draw area on map, then drag. Then download the hotspots and the monthly series as CSV, or the charts as pictures."
 
 **1:30 to 1:42. Smoke.**
 Screen: Smoke tab.

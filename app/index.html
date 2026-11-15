@@ -832,6 +832,8 @@ function checkDates(){
   }
   if(!err.start&&!err.end&&val.start>val.end)err.start="The start month is after the end month.";
   for(const k of ["start","end"]){$(k+"Err").textContent=err[k];box[k].setAttribute("aria-invalid",err[k]?"true":"false");}
+  // the allowed range is shown once: in the message when a month is outside it, otherwise in the line below the boxes
+  $("dateRange").hidden=[err.start,err.end].some(e=>e.includes("Allowed:"));
   return err.start||err.end?null:[val.start,val.end];
 }
 /* read and check the area boxes; return the box or null (message in #msg) */
