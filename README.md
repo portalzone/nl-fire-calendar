@@ -1,8 +1,9 @@
 # Newfoundland and Labrador Fire Calendar
 
-A web app that merges NASA MODIS and VIIRS fire hotspots into one burning-activity record for
-Newfoundland and Labrador (NL). The data was requested from November 2000 to 7 November 2026; the first
-detection in the province is on 9 May 2001 (the app reads this date from the data). It was built for the 2026 NASA
+A web app that combines NASA MODIS and VIIRS satellite heat detections into one monthly record for
+Newfoundland and Labrador (NL). These detections, often called hotspots, are unusually hot areas seen by a
+satellite; they are not confirmed fires. The requested data spans November 2000 to 7 November 2026, and the first
+detection in the province is on 9 May 2001 (the app reads this date from the data). The app was built for the 2026 NASA
 Space Apps Challenge, St. John's, for the challenge "Harmonization of MODIS and VIIRS Hot Spots".
 
 Intended address: https://portalzone.github.io/nl-fire-calendar/ (GitHub Pages). Check that the page
@@ -18,33 +19,34 @@ opens before you share it.
 
 ## The problem
 
-MODIS (since 2000) and VIIRS (since 2012) both detect fires from space, but VIIRS sees much
-smaller fires. Raw counts from the two sensors cannot be compared, so a "busy" month in 2005
-and a "busy" month in 2022 mean different things. This app puts both on one scale.
+MODIS (since 2000) and VIIRS (since 2012) both detect unusually hot areas from space, but VIIRS can detect
+smaller hot areas. A direct count from VIIRS is therefore usually higher than a MODIS count for the same
+conditions. The app adjusts earlier MODIS counts with a multiplier so that monthly values can be compared.
 
 ## What the app does
 
-- A calendar heatmap, years by months, with a colorblind-safe viridis color ramp.
+- A calendar grid, with years as rows and months as columns. Its colors are designed to remain distinct for
+  people with common forms of color-vision deficiency.
 - Choose any area on the map (or type latitude and longitude) and any date range. All counts
   are recomputed in the browser for that area.
-- Compare a selected month, including the current partial month, against the same month in
-  other years of the same sensor era.
-- A "Right now" box at the top: the latest month so far, its count, the usual value for those days
-  (the multi-year baseline, which is the median of other years of the same sensor era), a plain verdict,
+- Compare a selected month, including the latest partial month, with the same month in other years from the
+  same instrument period: the MODIS period or the VIIRS period.
+- A "Right now" box at the top: the latest available month, its count, the usual value for those days
+  (the median from other years in the same instrument period), a plain-language comparison,
   and the area it applies to.
 - A "How to read this" box: what a square, a color, a fire cell and the median mean, and why fire cells are
   the default. Its error numbers are read from `app/data/summary.json`.
-- A local check under the method table: the VIIRS/MODIS ratio for the area you chose, next to the
-  province-wide ratio, with a sentence on which way older months there are probably off when the two differ
-  by more than 25%.
+- A comparison under the method table: the VIIRS/MODIS multiplier for the chosen area beside the
+  province-wide multiplier. If they differ by more than 25%, the app says whether older, adjusted MODIS
+  months may be too high or too low.
 - Downloads for the selected area and dates:
   - hotspots (CSV, one row per detection, with the sensor);
   - monthly series (CSV, with the baseline, difference from the median and percent of years below);
   - the calendar as a picture (PNG), with the area, months, count type, color scale and the NASA FIRMS credit
     printed on it;
   - the yearly chart and the month-comparison chart (SVG);
-  - the validation chart (PNG).
-- A smoke panel: monthly carbon monoxide (CO) from the Canadian Space Agency's MOPITT data,
+  - the sensor-comparison chart used to validate (check) the merged results (`validation.png`, PNG).
+- A carbon monoxide panel: monthly carbon monoxide (CO) from the Canadian Space Agency's MOPITT data,
   next to the fire counts, for the island of Newfoundland.
 
 ## How the merge works
@@ -53,52 +55,59 @@ and a "busy" month in 2022 mean different things. This app puts both on one scal
    refineries) or offshore, and low-confidence detections (MODIS confidence below 30, VIIRS
    "low"). The near-real-time rows carry no type flag, so they are kept.
 2. **Count in fire cells.** A fire cell is one 0.1 degree map cell with at least one detection
-   on one day. This stops VIIRS's finer pixels from inflating the count. Raw hotspot counts are
-   also available.
-3. **Fit one ratio.** Ratio k = VIIRS May to September totals divided by MODIS May to September
-   totals, over the 14 seasons 2012 to 2025 (Suomi NPP from 2012 to March 2018, NOAA-20 from
-   April 2018).
-4. **Merge.** Months before VIIRS starts are MODIS counts multiplied by k. From February 2012
-   the VIIRS record is used as observed. NOAA-21 is not added, to avoid double counting, and is
+   on one day. The cell counts once that day even if VIIRS records several detections there. A separate
+   raw-hotspot option counts every detection.
+3. **Calculate one multiplier.** The multiplier, k, is the total VIIRS count from May through September
+   divided by the total MODIS count for those months across the 14 seasons from 2012 through 2025. The
+   VIIRS record uses Suomi NPP from 2012 through March 2018 and NOAA-20 from April 2018.
+4. **Combine the records.** MODIS counts before February 2012 are multiplied by k. From February 2012,
+   the VIIRS count is used without adjustment. NOAA-21 is not added, to avoid double counting, and is
    used only as a check.
-5. **Compare like with like.** Each month is compared only with years of its own era, because a
-   MODIS zero multiplied by k is still zero while VIIRS often sees small fires in the same month.
+5. **Keep the comparison periods separate.** Each month is compared only with years from the same
+   instrument period. Multiplying a MODIS count of zero by k still gives zero, while VIIRS may detect
+   small hot areas during the same month.
 
 ## How well it works
 
 These numbers come from `app/data/summary.json`.
 
-| Count | Ratio k | Yearly ratio range | Season error* | Month error* |
+| Count | Adjustment multiplier k | Range of yearly multipliers | Median season error* | Median month error* |
 |---|---|---|---|---|
 | Fire cells (default) | 1.615 | 1.40 to 6.67 | 15% | 60% |
 | Raw hotspots | 4.663 | 2.0 to 9.0 | 29% | 80% |
 
-\*Median error when each season (or month) is predicted from a ratio fitted on the other seasons.
+\*For each season or month, the app recalculates the multiplier without that period and reports the median
+percentage difference between the estimate and the recorded VIIRS count.
 
-- Season totals are predicted far better than single months. Monthly numbers in the province are small.
-- The highest yearly cell ratio (6.67) is 2017 alone, when MODIS saw 3 cells and VIIRS saw 20.
+- May-to-September totals have lower estimation errors than individual months. Monthly counts in the province
+  are often small.
+- The highest yearly fire-cell multiplier (6.67) is from 2017, when MODIS saw 3 cells and VIIRS saw 20.
   Without 2017 the range is 1.40 to 2.44.
 - Suomi NPP has multi-week gaps in some summers (for example 26 July to 14 August 2022 and
-  10 to 29 July 2024), which is why NOAA-20 replaces it as soon as NOAA-20 starts. Keeping Suomi NPP for
-  all years raises the season error from 14.6% to 18.8%.
+  10 to 29 July 2024), which is why NOAA-20 replaces it as soon as NOAA-20 starts.
 - NOAA-21 totals are 1.03, 1.15 and 1.00 times NOAA-20's in 2023 to 2025.
 
 ## Limits
 
-- One ratio is applied to all years. It changes from year to year and with fire size.
-- A province-wide ratio is not valid for small areas. The app shows the local ratio for your area. For the
-  "Island of Newfoundland" box it is 2.87 with fire cells, against 1.62 for the province (read from the app).
-  Numbers for a small area are indicative, not exact.
+- One province-wide multiplier is applied to all earlier years, although the yearly multiplier varies with
+  the year and the size of the detected hot areas.
+- A province-wide multiplier may not describe a small area. The app calculates the local multiplier for the
+  chosen area and shows it beside the province-wide value. Use small-area results to compare broad patterns,
+  not as precise counts of individual fires.
 - MODIS Terra flew alone before July 2002. Those months are marked in the calendar.
-- The latest month is partial and comes from near-real-time files, which can be revised.
+- The latest month is incomplete. It comes from files published soon after the satellite observations, and
+  those files may later be revised.
 - Not included: fires reported by agencies are not used, only satellite detections. The app compares
   months, not single fires, so it cannot say how one particular fire compares with another.
-- MODIS data is Collection 6 up to 2022 and 6.1 after. This is not modelled.
+- MODIS data uses processing version Collection 6 through 2022 and Collection 6.1 after 2022. The app does
+  not adjust counts for differences between those processing versions.
 - Hotspots are satellite thermal detections, not confirmed fire perimeters.
-- The CO data covers only 2012, 2013, 2018, 2019 and 2024. The data product version is V18 in
-  the first four years and V20 in 2024, so the app plots CO as a percent of each year's own average.
+- The CO data covers five selected years: 2012, 2013, 2018, 2019 and 2024. The source uses product version
+  V18 for the first four years and V20 for 2024. Because those versions differ, the app plots each month's CO
+  as a percentage above or below that year's average. Use these percentages to compare months within a year,
+  not absolute CO levels between years.
   The CO box includes nearby sea and small parts of the Gulf, southern Labrador and Quebec.
-  CO also carries smoke from fires in other provinces, so a high month is not proof of a local fire.
+  Wind can carry CO from fires in other provinces, so a high month is not proof of a local fire.
   Months with fewer than 15 days of readings are left out.
 
 ## Run it
