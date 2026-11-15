@@ -82,6 +82,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 input[aria-invalid=true]{border-color:#9c2a00;border-width:2px}
 .applyrow{margin:10px 0 4px}
 @media(max-width:600px){.applyrow .btn{width:100%}}
+.area-card .btn:hover,#panel-downloads .btn:hover{background:#005a8c;border-color:#005a8c;color:#fff}
+.area-card .btn:active,#panel-downloads .btn:active{background:#003f63;border-color:#003f63;color:#fff}
+.area-card .btn[aria-pressed=true]{background:#005a8c;border-color:#005a8c;color:#fff}
+.area-card .btn:focus-visible,#panel-downloads .btn:focus-visible{outline:3px solid #000;outline-offset:2px;box-shadow:0 0 0 2px #fff}
+.area-card .btn[disabled]:hover{background:#fff;color:#005a8c;border-color:var(--accent)}
 .mapctl{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 0}
 .mapctl .btn{min-width:44px}
 .btn[disabled]{opacity:.55;cursor:default}
@@ -211,7 +216,7 @@ ul.how li{margin:3px 0}
     <p class="hint">Colors use the colorblind-safe viridis ramp on a square-root scale so quiet and extreme months can both be read.</p>
   </section>
 
-  <section class="card" aria-labelledby="h-area">
+  <section class="card area-card" aria-labelledby="h-area">
     <h2 id="h-area">2. Choose an area and dates</h2>
     <div class="grid">
       <div>
@@ -232,8 +237,8 @@ ul.how li{margin:3px 0}
           <div><label for="lonMax">East longitude (negative)</label><input type="number" id="lonMax" step="0.1"></div>
         </div>
         <p style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 4px">
-          <button class="btn alt" id="reset">Reset to all of NL</button>
-          <button class="btn alt" id="island">Island of Newfoundland</button>
+          <button class="btn alt" id="reset" aria-pressed="false">Reset to all of NL<span class="selmark" aria-hidden="true"></span></button>
+          <button class="btn alt" id="island" aria-pressed="false">Island of Newfoundland<span class="selmark" aria-hidden="true"></span></button>
           <button class="btn alt" id="drawmode" aria-pressed="false">Draw area on map: off</button>
         </p>
         <p class="applyrow"><button class="btn" id="apply" type="button">Apply area and dates</button></p>
@@ -399,7 +404,7 @@ async function init(){
   let a=90,b=-90,c=180,d=-180;for(const r of RECORDS){if(r.lat<a)a=r.lat;if(r.lat>b)b=r.lat;if(r.lon<c)c=r.lon;if(r.lon>d)d=r.lon;}
   EXTENT={latMin:Math.floor(a*10)/10-0.2,latMax:Math.ceil(b*10)/10+0.2,lonMin:Math.floor(c*10)/10-0.2,lonMax:Math.ceil(d*10)/10+0.2};
   state.bbox={...EXTENT};
-  $("eranote").textContent=`Months before ${MONTHS[VIIRS_FIRST%12]} ${Math.floor(VIIRS_FIRST/12)} are MODIS counts scaled to VIIRS level; later months are VIIRS counts as observed. Each month is compared only with years of its own kind.`;
+  $("eranote").textContent=`Months before ${MONTHS[VIIRS_FIRST%12]} ${Math.floor(VIIRS_FIRST/12)} are MODIS counts scaled to VIIRS level; later months are VIIRS counts as observed. Each month is compared only with years in the same sensor period (MODIS or VIIRS).`;
   $("annualnote").textContent=`Orange: MODIS scaled to VIIRS level. Blue: VIIRS observed from ${idxToStr(VIIRS_FIRST)}. Pale bars: before July 2002 (Terra only). The latest months come from near-real-time files, which can be revised.`;
   bind();writeInputs();setupDateBoxes();setupMap();selectLatest(false);recompute();showTab(state.tab);
 }
@@ -461,7 +466,7 @@ function renderHeat(){
       else{b.style.background="var(--zero)";b.classList.add("zero");}
       if(r.terra)b.classList.add("terra");if(r.partial)b.classList.add("partial");
       if(r.value>0&&r.below>=90&&r.nb>=6&&!r.partial){const f=document.createElement("span");f.className="flag";f.textContent="●";b.appendChild(f);}
-      const note=r.partial?`partial month, ${COV_DAY} days`:(r.nb>=6?`${Math.round(r.below*r.nb/100)} of ${r.nb-1} other same-kind years had fewer`:"too few other same-kind years to compare");
+      const note=r.partial?`partial month, ${COV_DAY} days`:(r.nb>=6?`${Math.round(r.below*r.nb/100)} of ${r.nb-1} other years in the same sensor period (MODIS or VIIRS) had fewer`:"too few other years in the same sensor period (MODIS or VIIRS) to compare");
       b.setAttribute("aria-label",`${MONTHS[m-1]} ${y}: ${fmt(r.value)} ${unitName()}, ${note}`);
       b.setAttribute("aria-pressed","false");
       b.addEventListener("click",()=>selectCell(y,m,r.partial?COV_DAY:31));
@@ -575,7 +580,7 @@ function renderCO(){
   let fmax=1;drawable.forEach(y=>{for(let m=1;m<=12;m++){const v=fire(y,m);if(v!=null&&v>fmax)fmax=v;}});
   const label=y=>`${y}: monthly carbon monoxide around the island as a percent above or below that year's own average (scale −${ax}% to +${ax}%, ${unit}), and merged ${unitName()} for the selected area (scale 0 to ${fmt(fmax)}), by month. The numbers are in the table below.`;
   const chart=(y,big)=>{
-    const W=big?480:200,H1=big?150:62,H2=big?90:38,padL=big?54:4,padR=big?8:4,fs=14,gapB=big?24:4,yb=H1+H2+8,H=yb+gapB,step=(W-padL-padR)/12,mid=8+(H1-16)/2;
+    const W=big?480:200,H1=big?150:62,H2=big?90:38,padL=big?54:4,padR=big?8:4,fs=14,gapB=big?24:4,yb=H1+H2+(big?24:8),H=yb+gapB,step=(W-padL-padR)/12,mid=8+(H1-16)/2;
     let path="",dots="",bars="",labs="",gap=true;
     for(let m=1;m<=12;m++){
       const x=padL+(m-0.5)*step,v=co[y+"-"+m];
@@ -589,8 +594,8 @@ function renderCO(){
     }
     const axis=big?`<text x="${padL-6}" y="18" font-size="${fs}" text-anchor="end" fill="#4f5d6b">+${ax}%</text>
       <text x="${padL-6}" y="${mid+5}" font-size="${fs}" text-anchor="end" fill="#4f5d6b">avg</text>
-      <text x="${padL-6}" y="${H1}" font-size="${fs}" text-anchor="end" fill="#4f5d6b">−${ax}%</text>
-      <text x="${padL-6}" y="${yb-H2+16}" font-size="${fs}" text-anchor="end" fill="#4f5d6b">${fmt(fmax)}</text>`:"";
+      <text class="lbl-co-min" x="${padL-6}" y="${H1}" font-size="${fs}" text-anchor="end" fill="#4f5d6b">−${ax}%</text>
+      <text class="lbl-fire-max" x="${padL-6}" y="${yb-H2+16}" font-size="${fs}" text-anchor="end" fill="#4f5d6b">${fmt(fmax)}</text>`:"";
     return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${label(y)}">
       <line x1="${padL}" x2="${W-padR}" y1="${mid}" y2="${mid}" stroke="#8793a1" stroke-dasharray="3 3"/>
       <line x1="${padL}" x2="${W-padR}" y1="${yb}" y2="${yb}" stroke="#6b7886"/>${axis}
@@ -649,7 +654,7 @@ function renderMethod(){
   ${row("Fire cells",R.cells)}${row("Raw hotspots",R.hotspots)}</table></div>
   <p class="hint" id="localratio">${localRatioText()}</p>
   <p class="hint">*Median error when each season is predicted from the other seasons (leave one year out). Season totals are predicted far better than single months.</p>
-  <p class="hint"><b>Limits.</b> The ratio is not constant: it changes from year to year (range above) and by region (the local ratio for your area is computed above), so numbers for a small area are indicative, not exact. Fire cells compress very large fires, and raw hotspot counts show them more strongly. A MODIS zero stays zero when scaled, which is why each month is compared only with years of its own kind. Data through ${SUM.coverage_end}; the latest month is partial.</p>
+  <p class="hint"><b>Limits.</b> The ratio is not constant: it changes from year to year (range above) and by region (the local ratio for your area is computed above), so numbers for a small area are indicative, not exact. Fire cells compress very large fires, and raw hotspot counts show them more strongly. A MODIS zero stays zero when scaled, which is why each month is compared only with years in the same sensor period (MODIS or VIIRS). Data through ${SUM.coverage_end}; the latest month is partial.</p>
   <p class="hint"><b>Not included.</b> Fires reported by agencies are not used, only satellite detections. The app compares months, not single fires, so it cannot say how one particular fire compares with another.</p>`;
 }
 function localRatioText(){
@@ -661,7 +666,15 @@ function localRatioText(){
                                  :` Months before ${idxToStr(VIIRS_FIRST)} here are scaled with the province-wide ratio, so they are probably about ${Math.round(100*(K/k-1))}% too high.`;
   return t;
 }
+/* the quick area buttons show which one is in use: blue fill, aria-pressed and a "Selected" mark */
+function markQuickButtons(){
+  const b=state.bbox,eq=o=>["latMin","latMax","lonMin","lonMax"].every(k=>Math.abs(b[k]-o[k])<1e-9);
+  for(const [id,o] of [["reset",EXTENT],["island",ISLAND]]){
+    const on=eq(o),el=$(id);el.setAttribute("aria-pressed",on?"true":"false");el.querySelector(".selmark").textContent=on?" ✓ Selected":"";
+  }
+}
 function updateSummary(){
+  markQuickButtons();
   const b=state.bbox,n=RECORDS.filter(r=>inBox(r,b)&&r.idx>=state.startIdx&&r.idx<=state.endIdx).length;
   $("calArea").textContent=`Area: ${areaName()}. Months ${idxToStr(state.startIdx)} to ${idxToStr(state.endIdx)}.`;
   $("areasummary").textContent=`Area: ${b.latMin.toFixed(1)} to ${b.latMax.toFixed(1)}°N, ${Math.abs(b.lonMin).toFixed(1)} to ${Math.abs(b.lonMax).toFixed(1)}°W. ${n.toLocaleString()} cleaned detections in this area and date range.`;

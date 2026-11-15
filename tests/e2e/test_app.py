@@ -1532,3 +1532,83 @@ def test_apply_is_full_width_on_a_phone_and_no_sideways_scroll(browser, base):
     pg.click("#apply")
     assert pg.inner_text("#startErr") and pg.evaluate("document.documentElement.scrollWidth") <= 390
     ctx.close()
+
+
+# ---------------------------------------------------------------- button states, chart label, wording
+AREA_BUTTONS = ["#apply", "#reset", "#island", "#drawmode", "#mapArea", "#mapReset"]
+DOWNLOAD_BUTTONS = ["#dlHot", "#dlSeries", "#dlPng", "#dlAnnualSvg", "#dlMonthSvg", "#dlValid"]
+
+
+def colours(pg, sel):
+    c = pg.evaluate(f"(() => {{ const s = getComputedStyle(document.querySelector('{sel}')); return [s.backgroundColor, s.color]; }})()")
+    return _rgb(c[0]), _rgb(c[1])
+
+
+@pytest.mark.parametrize("sel", ["#reset", "#island", "#drawmode", "#dlSeries", "#dlAnnualSvg", "#dlValid"])
+def test_hover_gives_a_blue_fill_and_white_text(page, sel):
+    page.click("#island") if sel == "#reset" else None      # so "Reset" is not the selected one
+    if sel.startswith("#dl"):
+        open_tab(page, "downloads")
+    page.hover(sel)
+    page.wait_for_timeout(150)
+    bg, fg = colours(page, sel)
+    assert bg[2] > bg[0] + 60 and fg == [255, 255, 255], (bg, fg)     # blue, white text
+    assert _contrast(fg, bg) >= 4.5
+
+
+@pytest.mark.parametrize("sel", AREA_BUTTONS[:4] + DOWNLOAD_BUTTONS)
+def test_buttons_have_a_visible_keyboard_focus_with_3_to_1_contrast(page, sel):
+    if sel.startswith("#dl"):
+        open_tab(page, "downloads")
+    page.focus(sel)
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Tab")
+    assert page.evaluate("document.activeElement.id") == sel[1:]
+    style = page.evaluate("(() => { const s = getComputedStyle(document.activeElement); return [s.outlineStyle, s.outlineWidth, s.outlineColor]; })()")
+    assert style[0] == "solid" and float(style[1].replace("px", "")) >= 2
+    assert _contrast(_rgb(style[2]), (255, 255, 255)) >= 3
+
+
+def test_pressed_state_is_darker_blue_with_white_text(page):
+    page.hover("#island")
+    page.mouse.down()
+    bg, fg = colours(page, "#island")
+    page.mouse.up()
+    assert fg == [255, 255, 255] and bg[2] > bg[0] and _contrast(fg, bg) >= 4.5
+
+
+def test_selected_quick_button_is_blue_pressed_and_says_selected(page):
+    # at start the whole province is in use
+    assert page.get_attribute("#reset", "aria-pressed") == "true" and "Selected" in page.inner_text("#reset")
+    assert page.get_attribute("#island", "aria-pressed") == "false" and "Selected" not in page.inner_text("#island")
+    page.click("#island")
+    page.mouse.move(0, 0)
+    assert page.get_attribute("#island", "aria-pressed") == "true" and "✓ Selected" in page.inner_text("#island")
+    assert page.get_attribute("#reset", "aria-pressed") == "false"
+    bg, fg = colours(page, "#island")
+    assert bg[2] > bg[0] + 60 and fg == [255, 255, 255] and _contrast(fg, bg) >= 4.5
+    # a typed area that is neither: no quick button is selected
+    page.fill("#latMax", "50")
+    page.click("#apply")
+    assert page.get_attribute("#island", "aria-pressed") == "false" and page.get_attribute("#reset", "aria-pressed") == "false"
+
+
+@pytest.mark.parametrize("width", [1400, 390])
+def test_large_smoke_chart_labels_do_not_overlap(browser, base, width):
+    ctx, pg = co_page(browser, base, co_years(13), width=width)
+    a = pg.locator("#coBig .lbl-co-min").bounding_box()
+    b = pg.locator("#coBig .lbl-fire-max").bounding_box()
+    assert a and b
+    gap = b["y"] - (a["y"] + a["height"])
+    assert gap >= 4, gap
+    ctx.close()
+
+
+def test_wording_uses_the_sensor_period_not_kind(page):
+    html = (APP / "index.html").read_text()
+    assert "own kind" not in html and "same-kind" not in html
+    assert "years in the same sensor period (MODIS or VIIRS)" in page.inner_text("#eranote")
+    label = page.get_attribute("#heat button[aria-label^='Jun 2012:']", "aria-label")
+    assert "years in the same sensor period (MODIS or VIIRS)" in label
+    open_tab(page, "method")
+    assert "years in the same sensor period (MODIS or VIIRS)" in page.inner_text("#method")
