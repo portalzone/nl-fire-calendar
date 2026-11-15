@@ -199,18 +199,27 @@ def make_figure(path: Path, modis_s, ref_s, harm_s, stats, k, label):
     fig, ax = plt.subplots(1, 2, figsize=(12, 4.6))
     x, y = modis_s.reindex(yrs), ref_s.reindex(yrs)
     ax[0].scatter(x, y)
-    for yr in yrs:
-        ax[0].annotate(str(yr), (x[yr], y[yr]), textcoords="offset points", xytext=(4, 4), fontsize=8)
-    xs = np.linspace(0, max(float(x.max()), 1), 50)
+    # label only a few years so the labels stay readable: the two biggest seasons and the two most recent
+    xr, yr_ = max(float(x.max()), 1), max(float(y.max()), 1)
+    big = sorted(yrs, key=lambda t: -float(x[t]))[:2]
+    for yr in sorted(set(big) | set(yrs[-2:])):
+        last = yr == yrs[-1]                                  # the last year goes just left of its point
+        ax[0].annotate(str(yr), (x[yr], y[yr]), textcoords="offset points", xytext=(-6, -3) if last else (5, -10),
+                       ha="right" if last else "left", fontsize=8)
+    xs = np.linspace(0, xr, 50)
     ax[0].plot(xs, k * xs, "--", label=f"VIIRS = {k:.2f} x MODIS")
     ax[0].set(xlabel=f"MODIS May-Sep {label}", ylabel=f"VIIRS May-Sep {label}",
               title=f"Fit years {yrs[0]}-{yrs[-1]} (r = {stats['pearson_r']:.3f})")
-    ax[0].legend()
-    ax[1].plot(modis_s.index, modis_s.values, marker="o", ms=3, label="MODIS raw")
-    ax[1].plot(ref_s.index[ref_s > 0], ref_s[ref_s > 0], marker="o", ms=3, label="VIIRS raw")
-    ax[1].plot(harm_s.index, harm_s.values, marker="o", ms=3, label="Merged series")
+    ax[0].text(0.98, 0.04, f"r is driven by {min(big)} and {max(big)}; small years sit above the line",
+               transform=ax[0].transAxes, ha="right", va="bottom", fontsize=8, color="#4f5d6b")
+    ax[0].legend(loc="upper left")
+    # merged series first, then the raw VIIRS line on top so it stays visible where the two are equal
+    l_mod, = ax[1].plot(modis_s.index, modis_s.values, marker="o", ms=3, color="C0", label="MODIS raw")
+    l_mrg, = ax[1].plot(harm_s.index, harm_s.values, marker="o", ms=3, color="C2", lw=1.5, label="Merged series")
+    l_vii, = ax[1].plot(ref_s.index[ref_s > 0], ref_s[ref_s > 0], marker="o", ms=6, color="C1", lw=3,
+                        label="VIIRS raw", zorder=3)
     ax[1].set(xlabel="Year", ylabel=f"May-Sep {label}", title="Before and after merging")
-    ax[1].legend()
+    ax[1].legend(handles=[l_mod, l_vii, l_mrg])
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
