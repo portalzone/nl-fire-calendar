@@ -45,11 +45,20 @@ DATE_RE = re.compile(r"MOP02J-(\d{4})(\d{2})(\d{2})")
 def read_day(path):
     """Return a DataFrame of valid island readings for one daily file (may be empty)."""
     try:
-        df = pd.read_csv(path, comment="#", header=None, usecols=[0, 1, 2, 3], names=COLS,
-                         skip_blank_lines=True)
+        # Read every line as text first. A download that stopped mid-line can leave a short
+        # line (for example "-8"); that line is skipped with a warning instead of stopping the run.
+        raw = pd.read_csv(path, comment="#", header=None, dtype=str, skip_blank_lines=True,
+                          sep="\t", names=["line"])
     except pd.errors.EmptyDataError:
         return pd.DataFrame(columns=COLS)
+    parts = raw["line"].str.split(",", expand=True)
+    short = int(parts.reindex(columns=range(4)).isna().any(axis=1).sum()) if len(parts) else 0
+    if short:
+        print(f"WARNING: {os.path.basename(str(path))}: skipped {short} incomplete line(s)")
+    df = parts.reindex(columns=range(4))
+    df.columns = COLS
     df = df.apply(pd.to_numeric, errors="coerce")
+    df = df.dropna(subset=["lat", "lon"])
     df = df[(df.lat >= BOX["lat_min"]) & (df.lat <= BOX["lat_max"]) &
             (df.lon >= BOX["lon_min"]) & (df.lon <= BOX["lon_max"])]
     return df

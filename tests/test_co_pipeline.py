@@ -25,6 +25,25 @@ class TestReadDay:
     def test_header_only_file_is_empty_not_an_error(self, tmp_path):
         assert len(bc.read_day(write(tmp_path, "d.csv", []))) == 0
 
+    def test_cut_off_line_is_skipped_with_a_warning(self, tmp_path, capsys):
+        # a download that stopped mid-line: the header and then "-8"
+        p = tmp_path / "MOP02J-20030303-L2V18.0.3.csv"
+        p.write_text(HEADER + "-8")
+        assert len(bc.read_day(p)) == 0
+        assert "skipped 1 incomplete line" in capsys.readouterr().out
+
+    def test_cut_off_line_after_good_rows_keeps_the_good_rows(self, tmp_path, capsys):
+        p = tmp_path / "d.csv"
+        p.write_text(HEADER + "48,-55,2e18,100\n49,-56,2.1e18,110\n47.5,-5")
+        df = bc.read_day(p)
+        assert len(df) == 2 and df.co_total.tolist() == [2e18, 2.1e18]
+        assert "skipped 1 incomplete line" in capsys.readouterr().out
+
+    def test_full_14_column_rows_are_read(self, tmp_path, capsys):
+        p = tmp_path / "d.csv"
+        p.write_text(HEADER + "48,-55,2e18,100" + ",1" * 10 + "\n")
+        assert len(bc.read_day(p)) == 1 and capsys.readouterr().out == ""
+
     def test_zero_byte_file_is_empty_not_an_error(self, tmp_path):
         p = tmp_path / "d.csv"
         p.write_text("")
