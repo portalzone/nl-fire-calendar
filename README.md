@@ -174,8 +174,8 @@ says so; they never skip. Last full run: 270 passed, 0 failed, 0 skipped. Pipeli
 
 ## Use of AI
 
-The code, tests and documentation in this repository were written with the help of an AI coding assistant
-(Claude, by Anthropic), and the team reviewed, ran and tested them.
+Use of AI: the code, tests and documentation in this repository were written with the help of AI tools, an AI
+coding assistant (Claude, by Anthropic) and GitHub Copilot. The team reviewed, ran and tested them.
 
 ## Folder layout
 
