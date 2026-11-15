@@ -1625,3 +1625,13 @@ def test_allowed_range_is_shown_only_once(page, start, end, in_message):
     if in_message:                          # fixing the date brings the line back
         set_dates(page, start="2005-01", end="2006-01")
         assert page.is_visible("#dateRange") and shown().count("Allowed: 2000-11 to 2026-11") == 1
+
+
+def test_all_six_download_buttons_look_the_same_at_rest(page):
+    open_tab(page, "downloads")
+    page.mouse.move(0, 0)                   # nothing hovered
+    looks = [page.evaluate(f"(() => {{ const s = getComputedStyle(document.querySelector('{sel}')); return [s.backgroundColor, s.color, s.borderTopColor]; }})()")
+             for sel in DOWNLOAD_BUTTONS]
+    assert len({l[0] for l in looks}) == 1, looks
+    assert looks[0][0] == "rgb(255, 255, 255)"                 # white fill
+    assert len({(l[1], l[2]) for l in looks}) == 1              # same blue text and outline
