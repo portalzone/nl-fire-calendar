@@ -102,10 +102,13 @@ percentage difference between the estimate and the recorded VIIRS count.
 - MODIS data uses processing version Collection 6 through 2022 and Collection 6.1 after 2022. The app does
   not adjust counts for differences between those processing versions.
 - Hotspots are satellite thermal detections, not confirmed fire perimeters.
-- The CO data covers five selected years: 2012, 2013, 2018, 2019 and 2024. The source uses product version
-  V18 for the first four years and V20 for 2024. Because those versions differ, the app plots each month's CO
-  as a percentage above or below that year's average. Use these percentages to compare months within a year,
-  not absolute CO levels between years.
+- The CO data in `app/data/co_monthly.json` runs from 2001 to 2024. No data is loaded for 2004 to 2009.
+  A year is drawn only if at least 9 of its 12 months have values, because each month is compared with that
+  year's own average. Drawn: 2002, 2003 and 2010 to 2024. Left out of the charts: 2001 (only 7 months).
+  The CSA file names show four product versions (V18.0.3, V19.9.3, V19.10.3 and V20.2.3), and the version changes
+  during 2020, 2022 and 2023. The app plots each month's CO as a percentage above or below that year's average,
+  so use it to compare months within a year, not CO levels between years. In 2020, 2022 and 2023 a step inside
+  the year can come from the version change and not from smoke.
   The CO box includes nearby sea and small parts of the Gulf, southern Labrador and Quebec.
   Wind can carry CO from fires in other provinces, so a high month is not proof of a local fire.
   Months with fewer than 15 days of readings are left out.
@@ -124,7 +127,7 @@ pip install -r requirements.txt
 python pipeline/build_harmonized.py
 
 # 2. Carbon monoxide (optional). Needs internet. Keeps only the island rows.
-python pipeline/download_mopitt.py --years 2012 2013 2018 2019 2024 --months 1 2 3 4 5 6 7 8 9 10 11 12
+python pipeline/download_mopitt.py --years 2001 2002 2003 2010 2011 2012 2013 2014 2015 2016 2017 2018 2019 2020 2021 2022 2023 2024 --months 1 2 3 4 5 6 7 8 9 10 11 12
 python pipeline/build_co.py
 
 # 3. Open the app
@@ -147,20 +150,32 @@ make coverage      # shows how much pipeline code the tests run
 ```
 
 Build `app/data/` first (step 1 and 2 above). If it is missing, the tests fail with a message that
-says so; they never skip. Last full run: 173 passed, 0 failed, 0 skipped. Pipeline line coverage: 93%
+says so; they never skip. Last full run: 270 passed, 0 failed, 0 skipped. Pipeline line coverage: 94%
 (build_co.py 94%, build_harmonized.py 95%, download_mopitt.py 90%).
 
 - `tests/test_fire_pipeline.py` (53 tests): cleaning rules, month and confidence boundaries, cell counting,
   the ratio fit (exact known answers, leave-one-year-out), leap-day handling, and contract tests that
   check the output files have the fields the app reads, and the check that fails when `app/data/` is missing.
 - `tests/test_full_run.py` (5): runs the whole pipeline on small made-up data where the right answer is known.
-- `tests/test_co_pipeline.py` (23): carbon monoxide rules (box edges, fill values, duplicate files, the 15-day minimum).
+- `tests/test_co_pipeline.py` (26): carbon monoxide rules (box edges, fill values, cut-off lines, duplicate files, the 15-day minimum).
 - `tests/test_download.py` (16): the downloader against a small local web server.
 - `tests/test_repo_files.py` (11): the Pages workflow, README claims, the CSA credit, no placeholders, and
   that the Word files, raw data and zip files are ignored by Git.
-- `tests/e2e/test_app.py` (65): the app in a real browser: keyboard use, bad input, every download (CSV, PNG,
+- `tests/e2e/test_app.py` (159): the app in a real browser: the tabs (keyboard, deep links, Back button), the short top of the page and its closed sections, keyboard use, bad input, every download (CSV, PNG,
   SVG), the "Right now" and "How to read this" boxes, the local ratio against an independent count,
   color contrast, the CO panel, a missing CO file, and a phone-width screen.
+
+## Team and contributions
+
+- Victor Chisom Muojeke: data pipeline, app, carbon monoxide data.
+- Amalraj Rajesh: testing, review of the merged app, demo video.
+- Chiemerie Cletus Obijiaku: screenshots, demo script and subtitles.
+- Olaleye Adeniyi Akinuli: text review and the judging-readiness work on the app introduction.
+
+## Use of AI
+
+The code, tests and documentation in this repository were written with the help of an AI coding assistant
+(Claude, by Anthropic), and the team reviewed, ran and tested them.
 
 ## Folder layout
 

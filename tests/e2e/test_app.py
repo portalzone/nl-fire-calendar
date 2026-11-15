@@ -97,6 +97,7 @@ def test_challenge_brief_uses_data_backed_evidence(page):
     assert page.inner_text("#proofPeriod") == expected_period
     assert page.inner_text("#proofSeasons") == str(len(summary["series_rules"]["fit_years"]))
     assert page.inner_text("#proofError") == f"{round(summary['ratios']['cells']['cv_median_pct_err'])}%"
+    page.click("#introMore summary")          # the introduction is closed by default
     text = page.inner_text("#challengeBrief")
     for phrase in ("MODIS", "VIIRS", "emergency responders", "historical context", "does not forecast"):
         assert phrase in text
@@ -326,7 +327,8 @@ def test_right_now_card_names_the_area(page):
 
 
 def test_how_to_read_box_explains_fire_cells_median_and_error(page):
-    text = page.inner_text("#h-how >> xpath=..")
+    page.click("#howDetails summary")         # "How to read this" is closed by default
+    text = page.inner_text("#howDetails")
     assert "fire cells" in text and "median" in text and "multi-year baseline" in text
     summary = json.loads((APP / "data" / "summary.json").read_text())
     cells = round(summary["ratios"]["cells"]["cv_median_pct_err"])
@@ -712,7 +714,10 @@ def test_tab_bar_on_a_phone_scrolls_inside_its_box_and_text_is_large_enough(brow
     pg.goto(base)
     pg.wait_for_selector(".cell")
     assert pg.evaluate("document.documentElement.scrollWidth") <= 390
-    assert pg.evaluate("getComputedStyle(document.getElementById('tablist')).overflowX") in ("auto", "scroll")
+    # the tab labels wrap onto two rows, so every tab is inside the bar without scrolling
+    for t in TABS:
+        left, right, bl, br = tab_inside_bar(pg, t)
+        assert left >= bl - 0.5 and right <= br + 0.5, t
     for t in TABS:
         assert float(pg.evaluate(f"getComputedStyle(document.getElementById('tab-{t}')).fontSize").replace("px", "")) >= 14
         pg.click(f"#tab-{t}")
@@ -1005,4 +1010,131 @@ def test_phone_map_is_redrawn_after_a_round_trip_through_every_tab(browser, base
         pg.tap(f"#tab-{t}")
     pg.wait_for_timeout(100)
     assert map_painted(pg) > 1000
+    ctx.close()
+
+
+# ---------------------------------------------------------------- short top of the page
+def first_screen(browser, base, width, height):
+    ctx = browser.new_context(viewport={"width": width, "height": height}, has_touch=width < 500, is_mobile=width < 500)
+    pg = ctx.new_page()
+    pg.route("**/data/co_monthly.json*", lambda r: r.fulfill(status=200, content_type="application/json", body=fake_co()))
+    pg.goto(base)
+    pg.wait_for_selector(".cell")
+    return ctx, pg
+
+
+def top_of(pg, selector):
+    return pg.evaluate(f"document.querySelector('{selector}').getBoundingClientRect().top + scrollY")
+
+
+def test_tab_bar_and_calendar_are_in_the_first_screen_at_1400(browser, base):
+    ctx, pg = first_screen(browser, base, 1400, 900)
+    assert top_of(pg, ".tabbar") <= 450
+    assert top_of(pg, "#h-cal") < 900 - 30          # the calendar card's heading shows in a 1400x900 window
+    ctx.close()
+
+
+@pytest.mark.parametrize("width,limit", [(390, 700), (1400, 450)])
+def test_tab_bar_position_limits(browser, base, width, limit):
+    ctx, pg = first_screen(browser, base, width, 844)
+    assert top_of(pg, ".tabbar") <= limit
+    assert pg.evaluate("document.documentElement.scrollWidth") <= width
+    ctx.close()
+
+
+def test_introduction_and_how_to_read_are_closed_by_default(page):
+    for d in ("#introMore", "#howDetails"):
+        assert page.evaluate(f"document.querySelector('{d}').open") is False
+        assert page.inner_text(f"{d} summary").strip()            # each has a one-line summary
+    assert not page.is_visible(".judge-path") and not page.is_visible(".science-note")
+    assert page.is_visible("#h-brief") and page.is_visible(".proof-grid") and page.is_visible("#briefExplore")
+
+
+@pytest.mark.parametrize("key", ["Enter", " "])
+@pytest.mark.parametrize("section", ["#introMore", "#howDetails"])
+def test_collapsed_sections_open_with_enter_and_space(page, section, key):
+    page.focus(f"{section} summary")
+    page.keyboard.press(key)
+    assert page.evaluate(f"document.querySelector('{section}').open") is True
+    page.keyboard.press(key)
+    assert page.evaluate(f"document.querySelector('{section}').open") is False
+
+
+def test_proof_numbers_are_visible_and_match_summary_json(page):
+    summary = json.loads((APP / "data" / "summary.json").read_text())
+    assert page.is_visible("#proofPeriod") and page.is_visible("#proofSeasons") and page.is_visible("#proofError")
+    assert page.inner_text("#proofSeasons") == str(len(summary["series_rules"]["fit_years"]))
+    assert page.inner_text("#proofError") == f"{round(summary['ratios']['cells']['cv_median_pct_err'])}%"
+    first = min(s["first_date"] for s in summary["sources"].values())
+    assert page.inner_text("#proofPeriod").startswith(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][int(first[5:7]) - 1] + " " + first[:4])
+
+
+def test_skip_link_goes_to_the_main_content(page):
+    page.keyboard.press("Tab")
+    assert page.evaluate("document.activeElement.className") == "skip-link"
+    assert page.get_attribute(".skip-link", "href") == "#main" and page.locator("#main").count() == 1
+
+
+def test_calendar_comes_first_and_change_area_link_moves_to_the_controls(page):
+    assert top_of(page, "#h-cal") < top_of(page, "#h-area")
+    assert "Area: all of Newfoundland and Labrador" in page.inner_text("#calArea")
+    page.click("#changeArea")
+    assert page.evaluate("document.activeElement.id") == "start"
+    page.click("#island")
+    assert "island of Newfoundland" in page.inner_text("#calArea")
+
+
+# ---------------------------------------------------------------- CO note: versions and missing years
+def co_custom(years, version=None):
+    months = []
+    for y in years:
+        for m in range(1, 13):
+            row = {"year": y, "month": m, "month_key": f"{y}-{m:02d}", "days_with_data": 20, "readings": 100,
+                   "co_total_1e18": 2.0 + 0.01 * m, "co_surface_ppbv": 130 + m, "enough_days": True}
+            if version:
+                row["version"] = version(y, m)
+            months.append(row)
+    return json.dumps({"min_days": 15, "months": months})
+
+
+@pytest.mark.parametrize("years,expected", [
+    ([2001, 2002, 2003, 2010, 2011], "No data loaded for 2004 to 2009."),
+    ([2010, 2012], "No data loaded for 2011."),
+    ([2001, 2003, 2006, 2007, 2010], "No data loaded for 2002, 2004 to 2005 and 2008 to 2009."),
+])
+def test_co_note_names_missing_years(browser, base, years, expected):
+    ctx, pg = co_page(browser, base, co_custom(years))
+    assert expected in pg.inner_text("#coNote")
+    ctx.close()
+
+
+@pytest.mark.parametrize("years", [[2010, 2011, 2012], [2020]])
+def test_co_note_says_nothing_about_gaps_when_there_are_none(browser, base, years):
+    ctx, pg = co_page(browser, base, co_custom(years))
+    assert "No data loaded" not in pg.inner_text("#coNote")
+    ctx.close()
+
+
+def test_co_note_without_version_field_explains_versions_in_general(browser, base):
+    ctx, pg = co_page(browser, base, co_custom([2019, 2020, 2021]))
+    note = pg.inner_text("#coNote")
+    assert "changed during some years, for example 2020, 2022 and 2023" in note
+    assert "can come from the version change and not from smoke" in note
+    ctx.close()
+
+
+def test_co_note_with_version_field_names_the_years_where_it_changed(browser, base):
+    ver = lambda y, m: {2020: "V18.0.3" if m < 6 else "V19.9.3", 2022: "V19.9.3" if m < 9 else "V19.10.3"}.get(y, "V19.9.3")
+    ctx, pg = co_page(browser, base, co_custom([2020, 2021, 2022], ver))
+    note = pg.inner_text("#coNote")
+    assert "version changed during 2020 and 2022" in note and "2021" not in note.split("version changed during")[1].split(".")[0]
+    assert "V18.0.3" in note and "can come from the version change and not from smoke" in note
+    assert "for example 2020, 2022 and 2023" not in note       # no general sentence when the file says it
+    ctx.close()
+
+
+def test_co_note_with_one_version_everywhere_names_no_change(browser, base):
+    ctx, pg = co_page(browser, base, co_custom([2020, 2021], lambda y, m: "V20.2.3"))
+    note = pg.inner_text("#coNote")
+    assert "V20.2.3" in note and "version changed during" not in note
     ctx.close()
