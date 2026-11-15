@@ -7,18 +7,24 @@ without the real MOPITT download.
 import functools
 import http.server
 import json
+import math
+import re
 import threading
 from pathlib import Path
 
 import pytest
 
-playwright = pytest.importorskip("playwright.sync_api")
+import playwright.sync_api as playwright   # fails loudly if Playwright is not installed
+
+from conftest import require_app_data
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 APP = ROOT / "app"
 
-pytestmark = pytest.mark.skipif(not (APP / "data" / "summary.json").exists(),
-                                reason="run pipeline/build_harmonized.py first")
+@pytest.fixture(autouse=True, scope="module")
+def _app_data_must_exist():
+    """Fail, never skip, when app/data has not been built."""
+    require_app_data()
 
 
 def fake_co():
@@ -258,3 +264,231 @@ def test_method_text_has_no_unsupported_claims(page):
 
 def test_validation_chart_has_alt_text(page):
     assert len(page.get_attribute("img", "alt")) > 20
+
+
+# ---------------------------------------------------------------- challenge requirements added late
+def test_right_now_card_gives_a_plain_verdict_first(page):
+    text = page.inner_text("#now")
+    assert "Data through" in text and "usual" in text
+    assert any(w in text for w in ("typical", "highest", "Above", "Below", "too few", "No verdict", "no verdict"))
+    # the card sits above the area controls
+    assert page.evaluate("document.querySelector('#nowCard').getBoundingClientRect().top < document.querySelector('#start').getBoundingClientRect().top")
+
+
+def test_right_now_card_names_the_area(page):
+    assert "all of Newfoundland and Labrador" in page.inner_text("#now")
+    page.click("#island")
+    assert "island of Newfoundland" in page.inner_text("#now")
+
+
+def test_how_to_read_box_explains_fire_cells_median_and_error(page):
+    text = page.inner_text("#h-how >> xpath=..")
+    assert "fire cells" in text and "median" in text and "multi-year baseline" in text
+    summary = json.loads((APP / "data" / "summary.json").read_text())
+    cells = round(summary["ratios"]["cells"]["cv_median_pct_err"])
+    hot = round(summary["ratios"]["hotspots"]["cv_median_pct_err"])
+    assert f"error is {cells}% with fire cells and {hot}% with raw hotspots" in text
+    assert "not a confirmed fire" in text
+
+
+def test_subtitle_does_not_claim_data_from_before_the_first_detection(page):
+    sub = page.inner_text("#subtitle")
+    assert "first detection" in sub and "2001" in sub
+
+
+def test_calendar_png_download_is_a_real_picture(page):
+    with page.expect_download() as d:
+        page.click("#dlPng")
+    path = Path(d.value.path())
+    assert d.value.suggested_filename.endswith(".png")
+    data = path.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) > 10_000
+    width = int.from_bytes(data[16:20], "big")
+    height = int.from_bytes(data[20:24], "big")
+    assert width > 800 and height > 600
+
+
+def test_calendar_png_respects_the_selected_date_range(page):
+    page.fill("#start", "2020-01")
+    page.dispatch_event("#start", "change")
+    page.fill("#end", "2021-12")
+    page.dispatch_event("#end", "change")
+    with page.expect_download() as d:
+        page.click("#dlPng")
+    assert "2020-01_2021-12" in d.value.suggested_filename
+    data = Path(d.value.path()).read_bytes()
+    assert int.from_bytes(data[20:24], "big") < 900     # two year rows are much shorter than the full calendar
+
+
+@pytest.mark.parametrize("button,name", [("#dlAnnualSvg", "nl_fire_yearly_totals.svg"), ("#dlMonthSvg", "nl_fire_month_comparison.svg")])
+def test_chart_svg_downloads_are_valid_standalone_files(page, button, name):
+    with page.expect_download() as d:
+        page.click(button)
+    assert d.value.suggested_filename == name
+    text = Path(d.value.path()).read_text()
+    assert text.startswith("<?xml") and 'xmlns="http://www.w3.org/2000/svg"' in text and "<rect" in text
+
+
+def test_validation_chart_can_be_downloaded(page):
+    assert page.get_attribute("#dlValid", "download") == "nl_fire_validation.png"
+    assert (APP / "data" / "validation.png").exists()
+
+
+def test_local_ratio_check_follows_the_selected_area(page):
+    all_nl = page.inner_text("#localratio")
+    assert "local ratio" in all_nl and "whole province" in all_nl
+    page.click("#island")
+    assert page.inner_text("#localratio") != all_nl
+
+
+def test_local_ratio_for_an_area_with_no_modis_fires_is_explained(page):
+    for f, v in (("latMax", "40.5"), ("latMin", "40"), ("lonMin", "-30"), ("lonMax", "-29")):
+        page.fill(f"#{f}", v)
+    page.click("#apply")
+    assert "cannot be computed" in page.inner_text("#localratio")
+
+
+def test_limits_name_what_is_not_included(page):
+    text = page.inner_text("#method")
+    assert "Not included" in text and "reported by agencies" in text and "single fires" in text
+
+
+def test_csa_credit_is_complete_and_has_no_placeholder(page):
+    html = (APP / "index.html").read_text()
+    assert "TODO" not in html
+    foot = page.inner_text("footer")
+    assert "Open Government Licence" in foot and "Canadian Space Agency" in foot and "MOPITT" in foot
+
+
+def _contrast(a, b):
+    def lum(c):
+        f = [v / 255 for v in c]
+        f = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in f]
+        return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _rgb(css):
+    return [int(float(x)) for x in re.findall(r"[\d.]+", css)[:3]]
+
+
+def test_zero_month_cells_have_a_border_of_at_least_3_to_1(page):
+    border = _rgb(page.evaluate("getComputedStyle(document.querySelector('.cell.zero')).borderTopColor"))
+    assert _contrast(border, (255, 255, 255)) >= 3      # against the white card
+    assert _contrast(border, (236, 239, 241)) >= 3 - 0.6  # and still visible against the grey fill
+
+
+def test_selected_month_has_a_black_and_white_double_ring(page):
+    page.click("#selComplete")
+    shadow = page.evaluate("getComputedStyle(document.querySelector('.cell.sel')).boxShadow")
+    assert shadow.count("inset") == 2
+    assert "rgb(0, 0, 0)" in shadow and "rgb(255, 255, 255)" in shadow
+
+
+@pytest.mark.parametrize("cell_colour", ["#440154", "#1f9e89", "#35b779", "#fde725", "#eceff1"])
+def test_selected_ring_is_visible_on_every_cell_colour(cell_colour):
+    """One of the two rings (black or white) must reach 3:1 on every calendar colour."""
+    c = [int(cell_colour[i:i + 2], 16) for i in (1, 3, 5)]
+    assert max(_contrast(c, (0, 0, 0)), _contrast(c, (255, 255, 255))) >= 3
+
+
+def test_right_now_card_shows_coordinates_for_a_drawn_box(page):
+    for f, v in (("latMax", "50"), ("latMin", "48"), ("lonMin", "-58"), ("lonMax", "-54")):
+        page.fill(f"#{f}", v)
+    page.click("#apply")
+    text = page.inner_text("#now")
+    assert "48.0 to 50.0°N" in text and "58.0 to 54.0°W" in text
+    assert "multi-year baseline" in text and "other" in text and "earlier" not in text
+
+
+def test_right_now_numbers_match_the_comparison_panel(page):
+    page.click("#selLatest")
+    now = page.inner_text("#now")
+    cmp_text = page.inner_text("#cmp")
+    verdict = page.inner_text("#now p b")
+    assert verdict in cmp_text
+    assert page.inner_text("#now .stat .big >> nth=1") == page.inner_text("#cmp .stat b >> nth=1")
+
+
+def test_subtitle_first_detection_comes_from_the_data(page):
+    rows = (APP / "data" / "hotspots_clean.csv").read_text().splitlines()[1:]
+    first = min(r.split(",")[0] for r in rows)
+    month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][int(first[5:7]) - 1]
+    assert f"first detection in the province: {month} {first[:4]}" in page.inner_text("#subtitle")
+
+
+def test_local_ratio_matches_an_independent_count_for_the_island(page):
+    """Recount fire cells on the island from the CSV, with the same fit seasons and sensors."""
+    summary = json.loads((APP / "data" / "summary.json").read_text())
+    years = set(summary["series_rules"]["fit_years"])
+    n20_from = summary["series_rules"]["noaa20_from"]
+    seen, v, m = set(), 0, 0
+    rows = (APP / "data" / "hotspots_clean.csv").read_text().splitlines()
+    head = rows[0].split(",")
+    i_d, i_la, i_lo, i_s = (head.index(c) for c in ("date", "latitude", "longitude", "source"))
+    for line in rows[1:]:
+        f = line.split(",")
+        d, la, lo, src = f[i_d], float(f[i_la]), float(f[i_lo]), f[i_s]
+        if not (46.4 <= la <= 51.9 and -59.7 <= lo <= -52.4) or int(d[:4]) not in years or not 5 <= int(d[5:7]) <= 9:
+            continue
+        use_viirs = "n20" if d[:7] >= n20_from else "snpp"
+        if src not in ("modis", use_viirs):
+            continue
+        key = (src, math.floor(la / 0.1), math.floor(lo / 0.1), d)
+        if key in seen:
+            continue
+        seen.add(key)
+        if src == "modis":
+            m += 1
+        else:
+            v += 1
+    k_local, k_prov = v / m, summary["ratios"]["cells"]["k"]
+    page.click("#island")
+    text = page.inner_text("#localratio")
+    assert f"local ratio of {k_local:.2f}" in text and f"{k_prov:.2f} for the whole province" in text
+    assert f"about {round(100 * (1 - k_prov / k_local))}% too low" in text      # island ratio is higher
+
+
+def test_local_ratio_says_nothing_extra_when_close_to_the_province(page):
+    # all of NL: the local ratio is the province ratio, so no correction sentence
+    text = page.inner_text("#localratio")
+    assert "too low" not in text and "too high" not in text
+
+
+def test_local_ratio_follows_the_count_type(page):
+    cells = page.inner_text("#localratio")
+    page.select_option("#metric", "hotspots")
+    assert page.inner_text("#localratio") != cells and "hotspots" in page.inner_text("#localratio")
+
+
+def test_no_hard_coded_regional_ratios_in_the_page():
+    html = (APP / "index.html").read_text()
+    assert "1.4 in Labrador" not in html and "2.9 on the island" not in html and "2.3 on the island" not in html
+
+
+def test_png_has_no_text_cut_off_and_matches_the_range(page):
+    page.fill("#start", "2025-01")
+    page.dispatch_event("#start", "change")
+    with page.expect_download() as d:
+        page.click("#dlPng")
+    data = Path(d.value.path()).read_bytes()
+    width = int.from_bytes(data[16:20], "big") // 2       # drawn at 2x
+    # the widest line drawn on the picture must fit inside it
+    widest = page.evaluate("""() => { const c = document.createElement('canvas').getContext('2d');
+        c.font = '13px system-ui,Helvetica,Arial,sans-serif';
+        const lines = ['Dashed outline: partial month. Striped: before July 2002 (Terra only). Grey: none detected.'];
+        c.font = '11px system-ui,Helvetica,Arial,sans-serif';
+        lines.push('Data: NASA FIRMS, MODIS and VIIRS active fire detections (https://earthdata.nasa.gov/firms). Merged by the NL Fire Calendar.');
+        return Math.max(...lines.map(l => c.measureText(l).width)); }""")
+    assert widest + 16 < width
+
+
+def test_downloads_use_the_selected_area(page):
+    for f, v in (("latMax", "50"), ("latMin", "48"), ("lonMin", "-58"), ("lonMax", "-54")):
+        page.fill(f"#{f}", v)
+    page.click("#apply")
+    with page.expect_download() as d:
+        page.click("#dlMonthSvg")
+    assert "<rect" in Path(d.value.path()).read_text()
+    assert page.evaluate("document.querySelector('#dlValid').getAttribute('href')") == "data/validation.png"

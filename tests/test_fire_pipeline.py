@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 
 import build_harmonized as bh
+from conftest import BUILD_HINT, missing_app_data, require_app_data
 
 ROOT = Path(__file__).resolve().parent.parent
 APP_DATA = ROOT / "app" / "data"
@@ -232,13 +233,13 @@ def test_season_totals_sums_may_to_september_by_year():
 
 
 # ---------------------------------------------------------------- contract: output files
-needs_outputs = pytest.mark.skipif(not (APP_DATA / "summary.json").exists(),
-                                   reason="run pipeline/build_harmonized.py first")
-
-
-@needs_outputs
 class TestOutputContract:
-    """The web app reads these fields. If a field is renamed or removed, the app breaks."""
+    """The web app reads these fields. If a field is renamed or removed, the app breaks.
+    These tests fail (they never skip) when app/data has not been built."""
+
+    @pytest.fixture(autouse=True, scope="class")
+    def _app_data_must_exist(self):
+        require_app_data()
 
     @pytest.fixture(scope="class")
     def summary(self):
@@ -296,3 +297,37 @@ class TestOutputContract:
     def test_baseline_never_mixes_eras(self):
         b = pd.read_csv(APP_DATA / "monthly_baseline.csv")
         assert "era" in b.columns
+
+
+# ---------------------------------------------------------------- missing app data must fail, not skip
+class TestMissingAppData:
+    """Error cases for the guard used by the contract tests and the browser tests."""
+
+    def test_empty_folder_reports_every_missing_file(self, tmp_path):
+        assert missing_app_data(tmp_path) == ["summary.json", "hotspots_clean.csv", "monthly_harmonized.csv",
+                                              "monthly_baseline.csv", "validation.png", "co_monthly.json"]
+
+    def test_missing_folder_fails_with_the_build_commands(self, tmp_path):
+        with pytest.raises(pytest.fail.Exception) as e:
+            require_app_data(tmp_path / "does_not_exist")
+        assert BUILD_HINT in str(e.value)
+        assert "python pipeline/build_harmonized.py" in str(e.value) and "python pipeline/build_co.py" in str(e.value)
+
+    def test_one_missing_file_fails_and_names_it(self, tmp_path):
+        for f in ("summary.json", "hotspots_clean.csv", "monthly_harmonized.csv", "monthly_baseline.csv", "validation.png"):
+            (tmp_path / f).write_text("x")
+        with pytest.raises(pytest.fail.Exception) as e:
+            require_app_data(tmp_path)
+        assert "co_monthly.json" in str(e.value) and "summary.json" not in str(e.value)
+
+    def test_complete_folder_passes(self, tmp_path):
+        for f in ("summary.json", "hotspots_clean.csv", "monthly_harmonized.csv", "monthly_baseline.csv",
+                  "validation.png", "co_monthly.json"):
+            (tmp_path / f).write_text("x")
+        require_app_data(tmp_path)          # no exception
+
+    def test_contract_and_browser_tests_do_not_use_skip_markers(self):
+        here = Path(__file__).parent
+        for f in (here / "test_fire_pipeline.py", here / "e2e" / "test_app.py"):
+            text = f.read_text()
+            assert "skip" + "if(" not in text and "importor" + "skip" not in text, f

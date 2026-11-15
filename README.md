@@ -1,10 +1,20 @@
 # Newfoundland and Labrador Fire Calendar
 
 A web app that merges NASA MODIS and VIIRS fire hotspots into one burning-activity record for
-Newfoundland and Labrador (NL), November 2000 to November 2026. It was built for the 2026 NASA
+Newfoundland and Labrador (NL). The data was requested from November 2000 to 7 November 2026; the first
+detection in the province is on 9 May 2001 (the app reads this date from the data). It was built for the 2026 NASA
 Space Apps Challenge, St. John's, for the challenge "Harmonization of MODIS and VIIRS Hot Spots".
 
-Live site: _add the address here once it is deployed_
+Intended address: https://portalzone.github.io/nl-fire-calendar/ (GitHub Pages). Check that the page
+opens before you share it.
+
+### One-time setup for the site
+
+1. The repository must be public.
+2. On GitHub: Settings, Pages, Source: GitHub Actions.
+3. Push to `main`. The workflow `.github/workflows/pages.yml` publishes only the `app/` folder, and runs
+   only when something in `app/` (or the workflow itself) changes. You can also run it by hand from the
+   Actions tab.
 
 ## The problem
 
@@ -19,7 +29,21 @@ and a "busy" month in 2022 mean different things. This app puts both on one scal
   are recomputed in the browser for that area.
 - Compare a selected month, including the current partial month, against the same month in
   other years of the same sensor era.
-- Download the hotspots for the selected area and dates, or the monthly series, as CSV.
+- A "Right now" box at the top: the latest month so far, its count, the usual value for those days
+  (the multi-year baseline, which is the median of other years of the same sensor era), a plain verdict,
+  and the area it applies to.
+- A "How to read this" box: what a square, a color, a fire cell and the median mean, and why fire cells are
+  the default. Its error numbers are read from `app/data/summary.json`.
+- A local check under the method table: the VIIRS/MODIS ratio for the area you chose, next to the
+  province-wide ratio, with a sentence on which way older months there are probably off when the two differ
+  by more than 25%.
+- Downloads for the selected area and dates:
+  - hotspots (CSV, one row per detection, with the sensor);
+  - monthly series (CSV, with the baseline, difference from the median and percent of years below);
+  - the calendar as a picture (PNG), with the area, months, count type, color scale and the NASA FIRMS credit
+    printed on it;
+  - the yearly chart and the month-comparison chart (SVG);
+  - the validation chart (PNG).
 - A smoke panel: monthly carbon monoxide (CO) from the Canadian Space Agency's MOPITT data,
   next to the fire counts, for the island of Newfoundland.
 
@@ -62,10 +86,13 @@ These numbers come from `app/data/summary.json`.
 ## Limits
 
 - One ratio is applied to all years. It changes from year to year and with fire size.
-- A province-wide ratio is not valid for small areas. In a test fit it was about 2.9 on the island
-  and 1.4 in Labrador. Numbers for a small area are indicative, not exact.
+- A province-wide ratio is not valid for small areas. The app shows the local ratio for your area. For the
+  "Island of Newfoundland" box it is 2.87 with fire cells, against 1.62 for the province (read from the app).
+  Numbers for a small area are indicative, not exact.
 - MODIS Terra flew alone before July 2002. Those months are marked in the calendar.
 - The latest month is partial and comes from near-real-time files, which can be revised.
+- Not included: fires reported by agencies are not used, only satellite detections. The app compares
+  months, not single fires, so it cannot say how one particular fire compares with another.
 - MODIS data is Collection 6 up to 2022 and 6.1 after. This is not modelled.
 - Hotspots are satellite thermal detections, not confirmed fire perimeters.
 - The CO data covers only 2012, 2013, 2018, 2019 and 2024. The data product version is V18 in
@@ -107,21 +134,29 @@ pip install -r requirements-dev.txt
 python -m playwright install chromium
 make test          # everything
 make test-fast     # pipeline tests only
-make coverage      # shows how much pipeline code the tests run (over 90%)
+make coverage      # shows how much pipeline code the tests run
 ```
 
-- `tests/test_fire_pipeline.py`: cleaning rules, month and confidence boundaries, cell counting,
+Build `app/data/` first (step 1 and 2 above). If it is missing, the tests fail with a message that
+says so; they never skip. Last full run: 173 passed, 0 failed, 0 skipped. Pipeline line coverage: 93%
+(build_co.py 94%, build_harmonized.py 95%, download_mopitt.py 90%).
+
+- `tests/test_fire_pipeline.py` (53 tests): cleaning rules, month and confidence boundaries, cell counting,
   the ratio fit (exact known answers, leave-one-year-out), leap-day handling, and contract tests that
-  check the output files have the fields the app reads.
-- `tests/test_full_run.py`: runs the whole pipeline on small made-up data where the right answer is known.
-- `tests/test_co_pipeline.py`: carbon monoxide rules (box edges, fill values, duplicate files, the 15-day minimum).
-- `tests/test_download.py`: the downloader against a small local web server.
-- `tests/e2e/test_app.py`: the app in a real browser: keyboard use, bad input, downloads, the CO panel,
-  a missing CO file, and a phone-width screen.
+  check the output files have the fields the app reads, and the check that fails when `app/data/` is missing.
+- `tests/test_full_run.py` (5): runs the whole pipeline on small made-up data where the right answer is known.
+- `tests/test_co_pipeline.py` (23): carbon monoxide rules (box edges, fill values, duplicate files, the 15-day minimum).
+- `tests/test_download.py` (16): the downloader against a small local web server.
+- `tests/test_repo_files.py` (11): the Pages workflow, README claims, the CSA credit, no placeholders, and
+  that the Word files, raw data and zip files are ignored by Git.
+- `tests/e2e/test_app.py` (65): the app in a real browser: keyboard use, bad input, every download (CSV, PNG,
+  SVG), the "Right now" and "How to read this" boxes, the local ratio against an independent count,
+  color contrast, the CO panel, a missing CO file, and a phone-width screen.
 
 ## Folder layout
 
 ```
+.github/workflows/  publishes app/ to GitHub Pages
 app/                 the web app (index.html) and its data in app/data/
 pipeline/            build_harmonized.py, build_co.py, download_mopitt.py
 tests/               pipeline tests and browser tests
@@ -135,8 +170,10 @@ System (FIRMS) (https://earthdata.nasa.gov/firms), part of NASA's Land, Atmosphe
 Capability for Earth observations (LANCE) (https://earthdata.nasa.gov/lance) and NASA's Earth Science
 Data and Information System (ESDIS).
 
-Carbon monoxide data: MOPITT Level 2 retrievals (an instrument on NASA's Terra satellite) from the
-Canadian Space Agency Open Data portal, https://donnees-data.asc-csa.gc.ca/users/OpenData_DonneesOuvertes/pub/MOPITT/.
-_Replace this line with the exact citation wording from the CSA MOPITT dataset page._
+Carbon monoxide data: MOPITT (Measurements of Pollution in the Troposphere), a Canadian instrument aboard
+NASA's Terra satellite. Source: Canadian Space Agency Open Data,
+https://donnees-data.asc-csa.gc.ca/en/dataset/ef42819f-35bb-49c0-a368-1e61fa876ee6.
+Contains information licensed under the Open Government Licence – Canada. This project filtered the data to the
+island of Newfoundland and averaged it by month.
 
 Built with Python, pandas, NumPy, Matplotlib, pytest and Playwright. The app uses no external libraries.

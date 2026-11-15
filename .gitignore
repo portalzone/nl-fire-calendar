@@ -6,4 +6,7 @@ node_modules/
 data/raw/csa/
 data/archive/
 *.zip
-data/raw
+data/raw/
+*.docx
+.pytest_cache/
+.coverage
