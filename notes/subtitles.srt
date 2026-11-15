@@ -1,0 +1,37 @@
+1
+00:00:00,000 --> 00:00:03,500
+I'm Amalraj Rajesh,
+from Basepan Space Challenge Team.
+
+2
+00:00:03,500 --> 00:00:06,500
+Challenge: Harmonization of MODIS
+and VIIRS Hot Spots.
+
+3
+00:00:06,500 --> 00:00:12,000
+MODIS is retiring; more than a decade
+of fire history could be lost.
+
+4
+00:00:12,000 --> 00:00:16,500
+NL Fire Calendar: twenty-five years
+of fire history on one scale.
+
+5
+00:00:16,500 --> 00:00:22,000
+Fire cells and one ratio from fourteen
+overlap seasons scale MODIS to VIIRS.
+
+6
+00:00:22,000 --> 00:00:24,500
+Data: NASA FIRMS and CSA MOPITT.
+
+7
+00:00:24,500 --> 00:00:27,500
+Pick an area and month
+for historical context.
+
+8
+00:00:27,500 --> 00:00:30,000
+Next: every province.
