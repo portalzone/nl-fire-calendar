@@ -172,6 +172,15 @@ says so; they never skip. Last full run: 270 passed, 0 failed, 0 skipped. Pipeli
 - Chiemerie Cletus Obijiaku: screenshots, demo script and subtitles.
 - Olaleye Adeniyi Akinuli: text review and the judging-readiness work on the app introduction.
 
+## Scaling beyond Newfoundland and Labrador
+
+This project covers Newfoundland and Labrador only. We tried to request a world download from NASA FIRMS (2000-11-02 to 2026-11-06) and it was refused: the number of fires returned exceeded the site's limit, and areas larger than half the globe are limited to a one-year date range. To go beyond one region, the data must be requested in pieces, by region or country and by year, then combined.
+
+What we would do next:
+- Request each region (province, country or ecozone) separately, and each large region one year at a time.
+- Calculate a separate MODIS-to-VIIRS multiplier for each region, and test each one with the same leave-one-season-out check.
+- Pre-compute monthly counts by region so the web page loads small files, because the current page reads one 2.4 MB file and counts in the browser.
+
 ## Use of AI
 
 Use of AI: the code, tests and documentation in this repository were written with the help of AI tools, an AI
