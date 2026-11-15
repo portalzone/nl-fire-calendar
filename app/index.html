@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NL Fire Calendar</title>
+<meta name="description" content="Burning activity calendar for Newfoundland and Labrador that merges NASA MODIS and VIIRS fire hotspots into one record.">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#17202a;--muted:#4f5d6b;--line:#c5ccd3;--accent:#0072B2;--zero:#eceff1}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#14213d;color:#fff;padding:18px 20px}
+header h1{margin:0 0 2px;font-size:22px}
+header p{margin:0;color:#d5def0}
+main{max-width:1200px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.card h2{margin:0 0 8px;font-size:17px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:2px}
+input,select,button{font:inherit}
+input[type=number],input[type=text],select{padding:6px 8px;border:1px solid #8793a1;border-radius:6px;width:100%;background:#fff}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:10px}
+button.btn{padding:8px 12px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;cursor:pointer}
+button.btn.alt{background:#fff;color:#005a8c}
+button.btn[aria-pressed=true]{background:#14213d;border-color:#14213d;color:#fff}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #000;outline-offset:2px;box-shadow:0 0 0 2px #fff}
+.hint{font-size:13px;color:var(--muted)}
+#msg{min-height:20px;color:#9c2a00;font-weight:600;font-size:14px;margin:4px 0}
+#mapwrap canvas{width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfcfd;cursor:crosshair;touch-action:pan-y}
+#mapwrap canvas.draw{touch-action:none}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin:6px 0}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+#heatwrap{overflow-x:auto}
+#heat{display:grid;grid-template-columns:48px repeat(12,minmax(36px,1fr)) 64px;gap:2px;min-width:580px}
+#heat .h{font-size:12px;color:var(--muted);text-align:center;padding:2px 0}
+#heat .y{font-size:12px;color:var(--muted);text-align:right;padding:5px 6px 0 0}
+.cell{border:1px solid transparent;border-radius:3px;height:26px;font-size:12px;font-weight:600;cursor:pointer;padding:0;position:relative}
+.cell.zero{border-color:var(--line)}
+.cell[disabled]{cursor:default;opacity:.35;border-color:transparent}
+.cell.sel{box-shadow:inset 0 0 0 2px #000,inset 0 0 0 4px #fff}
+.cell.partial{border:2px dashed #333}
+.cell.terra{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.55) 0 3px,transparent 3px 6px)}
+.cell .flag{position:absolute;top:1px;right:2px;font-size:8px;line-height:1}
+.tot{font-size:12px;text-align:center;padding-top:5px;color:var(--muted)}
+.ramp{height:12px;border-radius:6px;margin:6px 0 2px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:8px 0}
+.stat{background:#f3f6fa;border-radius:8px;padding:8px 10px}
+.stat b{display:block;font-size:20px}
+.stat span{font-size:12px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left}
+details summary{cursor:pointer;font-weight:600}
+img{max-width:100%}
+footer{max-width:1200px;margin:0 auto;padding:8px 16px 32px;color:var(--muted);font-size:13px}
+.err{background:#fff4e5;border:1px solid #f0b36b;padding:12px;border-radius:8px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Newfoundland and Labrador Fire Calendar</h1>
+  <p>NASA MODIS and VIIRS fire hotspots merged into one record, Nov 2000 to Nov 2026</p>
+</header>
+<main>
+  <div id="error" class="err" hidden></div>
+
+  <section class="card" aria-labelledby="h-area">
+    <h2 id="h-area">1. Choose an area and dates</h2>
+    <div class="grid">
+      <div>
+        <div class="row">
+          <div><label for="start">From (YYYY-MM)</label><input type="text" id="start" value="2000-11" inputmode="numeric" placeholder="2000-11" maxlength="7"></div>
+          <div><label for="end">To (YYYY-MM)</label><input type="text" id="end" value="2026-11" inputmode="numeric" placeholder="2026-11" maxlength="7"></div>
+          <div><label for="metric">Count</label>
+            <select id="metric">
+              <option value="cells">Fire cells (recommended)</option>
+              <option value="hotspots">Raw hotspots</option>
+            </select></div>
+        </div>
+        <div class="row">
+          <div><label for="latMax">North latitude</label><input type="number" id="latMax" step="0.1"></div>
+          <div><label for="latMin">South latitude</label><input type="number" id="latMin" step="0.1"></div>
+          <div><label for="lonMin">West longitude (negative)</label><input type="number" id="lonMin" step="0.1"></div>
+          <div><label for="lonMax">East longitude (negative)</label><input type="number" id="lonMax" step="0.1"></div>
+        </div>
+        <p style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 4px">
+          <button class="btn" id="apply">Apply area</button>
+          <button class="btn alt" id="reset">Reset to all of NL</button>
+          <button class="btn alt" id="island">Island of Newfoundland</button>
+          <button class="btn alt" id="drawmode" aria-pressed="false">Draw area on map by touch: off</button>
+        </p>
+        <div id="msg" role="alert"></div>
+        <p class="hint" id="areasummary" aria-live="polite"></p>
+        <p class="hint">With a mouse, drag a rectangle on the map. On a touch screen, turn on "Draw area on map by touch" first. <b>Fire cells</b> counts each 0.1&deg; map cell with a detection on a given day once, so the finer VIIRS pixels do not inflate the count. Raw hotspots count every detection.</p>
+      </div>
+      <div id="mapwrap">
+        <canvas id="map" role="img" aria-label="Map of hotspot detections. Use the latitude and longitude boxes to choose an area without the map."></canvas>
+        <div class="legend">
+          <span><span class="dot" style="background:#B45F06"></span>MODIS</span>
+          <span id="lgSnpp"><span class="dot" style="background:#009E73"></span>VIIRS Suomi NPP</span>
+          <span><span class="dot" style="background:#0072B2"></span>VIIRS NOAA-20</span>
+          <span><span class="dot" style="background:#777"></span>VIIRS NOAA-21 (map only)</span>
+          <span>Faded points are outside the selected area</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="h-cal">
+    <h2 id="h-cal">2. Burning activity calendar</h2>
+    <p class="hint">Merged count per month (<span id="metricname"></span>). Click or use the arrow keys, then press Enter, to select a month. A dot marks a month where at least 90% of the other years of the same type had fewer. Striped cells are before July 2002, when only MODIS Terra was flying. A dashed outline marks the partial latest month. <span id="eranote"></span></p>
+    <div id="heatwrap"><div id="heat" role="group" aria-label="Calendar heatmap, years by months"></div></div>
+    <div class="ramp" id="ramp"></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>0 (grey)</span><span id="rampmid"></span><span id="rampmax"></span></div>
+    <p class="hint">Colors use the colorblind-safe viridis ramp on a square-root scale so quiet and extreme months can both be read.</p>
+  </section>
+
+  <div class="grid">
+    <section class="card" aria-labelledby="h-cmp">
+      <h2 id="h-cmp">3. Selected month against other years</h2>
+      <p style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 6px">
+        <button class="btn alt" id="selLatest">Latest month to date</button>
+        <button class="btn alt" id="selComplete">Latest complete month</button>
+        <button class="btn alt" id="selPeak">Peak month in range</button>
+      </p>
+      <div id="cmp" aria-live="polite"></div>
+    </section>
+    <section class="card" aria-labelledby="h-ann">
+      <h2 id="h-ann">May to September total by year</h2>
+      <div id="annual"></div>
+      <p class="hint" id="annualnote"></p>
+    </section>
+  </div>
+
+  <section class="card" aria-labelledby="h-dl">
+    <h2 id="h-dl">4. Download</h2>
+    <p style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 6px">
+      <button class="btn" id="dlHot">Hotspots in selected area and dates (CSV)</button>
+      <button class="btn alt" id="dlSeries">Monthly series for selected area (CSV)</button>
+    </p>
+    <p class="hint" id="dlinfo"></p>
+  </section>
+
+  <section class="card" id="coCard" aria-labelledby="h-co" hidden>
+    <h2 id="h-co">Smoke context: carbon monoxide from CSA MOPITT</h2>
+    <p class="hint">Carbon monoxide (CO) is a gas released by fires. The blue dots show the monthly average CO in a box around the island of Newfoundland, measured by the MOPITT instrument. The orange bars below show merged fire counts for your selected area, for the same months. CO is shown for context. It does not prove which fire caused which reading.</p>
+    <div class="row"><div><label for="coMeasure">CO measure</label>
+      <select id="coMeasure"><option value="co_total_1e18">Whole air column (10¹⁸ molecules/cm²)</option><option value="co_surface_ppbv">Near the ground (ppbv)</option></select></div></div>
+    <div id="coChart" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px"></div>
+    <p class="hint" id="coNote" aria-live="polite"></p>
+    <details><summary>Show the numbers</summary><div id="coTable" style="overflow-x:auto"></div></details>
+  </section>
+
+  <section class="card" aria-labelledby="h-val">
+    <h2 id="h-val">How the merge works, and how well</h2>
+    <div id="method"></div>
+    <details style="margin-top:8px"><summary>Validation chart</summary>
+      <img src="data/validation.png" alt="Left: MODIS against VIIRS May to September fire cell totals for the fit years, with the fitted ratio. Right: raw MODIS, raw VIIRS and the merged series by year.">
+    </details>
+  </section>
+</main>
+<footer>
+  <p>We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management System (FIRMS) (<a href="https://earthdata.nasa.gov/firms">earthdata.nasa.gov/firms</a>), part of NASA's Land, Atmosphere Near real-time Capability for Earth observations (LANCE) (<a href="https://earthdata.nasa.gov/lance">earthdata.nasa.gov/lance</a>) and NASA's Earth Science Data and Information System (ESDIS).</p>
+  <p>Carbon monoxide data: MOPITT Level 2 retrievals (instrument on NASA's Terra satellite) from the Canadian Space Agency Open Data portal (<a href="https://donnees-data.asc-csa.gc.ca/users/OpenData_DonneesOuvertes/pub/MOPITT/">donnees-data.asc-csa.gc.ca</a>). <!-- TODO: replace with the exact citation wording from the CSA MOPITT dataset page. --></p>
+  <p>Built for the 2026 NASA Space Apps Challenge, St. John's. Hotspots are satellite thermal detections, not confirmed fire perimeters. Data are provided as is.</p>
+</footer>
+
+<script>
+"use strict";
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const VIRIDIS=["#440154","#482878","#3e4989","#31688e","#26828e","#1f9e89","#35b779","#6ece58","#b5de2b","#fde725"];
+const SERIES_START=2000*12+10, AQUA_START=2002*12+6;
+let SUM, RECORDS=[], CSVHEAD="", EXTENT, END_IDX, PARTIAL_IDX, LAST_COMPLETE, COV_DAY, VIIRS_FIRST, N20_FROM, HAS_SNPP;
+const state={bbox:null,startIdx:SERIES_START,endIdx:null,metric:"cells",sel:null,series:[],base:{},drawMode:false};
+const $=id=>document.getElementById(id);
+let cellEls={},cellGrid=[];
+let CO=null;
+const ISLAND={latMin:46.4,latMax:51.9,lonMin:-59.7,lonMax:-52.4};
+
+/* ---------- helpers ---------- */
+function hex(h){return [1,3,5].map(i=>parseInt(h.slice(i,i+2),16));}
+function viridis(t){t=Math.max(0,Math.min(1,t));const x=t*(VIRIDIS.length-1),i=Math.min(Math.floor(x),VIRIDIS.length-2),f=x-i;
+  const a=hex(VIRIDIS[i]),b=hex(VIRIDIS[i+1]);return a.map((v,j)=>Math.round(v+(b[j]-v)*f));}
+function rgb(c){return `rgb(${c[0]},${c[1]},${c[2]})`;}
+function relLum(c){const f=v=>{v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);};return 0.2126*f(c[0])+0.7152*f(c[1])+0.0722*f(c[2]);}
+function textFor(c){const L=relLum(c),cw=1.05/(L+0.05),cb=(L+0.05)/0.05;return cw>=cb?"#ffffff":"#000000";}
+function median(a){if(!a.length)return 0;const s=a.slice().sort((x,y)=>x-y),h=s.length/2;return s.length%2?s[(s.length-1)/2]:(s[h-1]+s[h])/2;}
+function idxToStr(i){return Math.floor(i/12)+"-"+String(i%12+1).padStart(2,"0");}
+function strToIdx(s){const [y,m]=s.split("-").map(Number);return y*12+m-1;}
+function fmt(v){if(v===0)return "0";if(v>=10)return Math.round(v).toLocaleString();return Number.isInteger(v)?String(v):(Math.round(v*10)/10).toString();}
+function inBox(r,b){return r.lat>=b.latMin&&r.lat<=b.latMax&&r.lon>=b.lonMin&&r.lon<=b.lonMax;}
+function ratioK(){return SUM.ratios[state.metric].k;}
+function unitName(){return state.metric==="cells"?"fire cells":"hotspots";}
+function eraOf(i){return i>=VIIRS_FIRST?"VIIRS":"MODIS";}
+function setMsg(t){$("msg").textContent=t||"";}
+
+/* ---------- loading ---------- */
+function parseCSV(text){
+  const lines=text.trim().split(/\r?\n/);const head=lines[0].split(",");
+  const iD=head.indexOf("date"),iLa=head.indexOf("latitude"),iLo=head.indexOf("longitude"),iS=head.indexOf("source");
+  const out=[];
+  for(let k=1;k<lines.length;k++){
+    const line=lines[k],f=line.split(","),date=f[iD];
+    const y=+date.slice(0,4),m=+date.slice(5,7),d=+date.slice(8,10),lat=+f[iLa],lon=+f[iLo];
+    out.push({line,y,m,d,lat,lon,src:f[iS],idx:y*12+m-1,cd:Math.floor(lat/0.1)+"|"+Math.floor(lon/0.1)+"|"+date});
+  }
+  return {head:lines[0],rows:out};
+}
+async function init(){
+  try{
+    const [s,t]=await Promise.all([
+      fetch("data/summary.json?v=2").then(r=>{if(!r.ok)throw new Error("summary.json "+r.status);return r.json();}),
+      fetch("data/hotspots_clean.csv?v=2").then(r=>{if(!r.ok)throw new Error("hotspots_clean.csv "+r.status);return r.text();})]);
+    SUM=s;const p=parseCSV(t);RECORDS=p.rows;CSVHEAD=p.head;
+  }catch(e){
+    const el=$("error");el.hidden=false;
+    el.innerHTML="<b>Could not load the data files.</b> ("+e.message+") If you opened this page by double-clicking it, the browser blocks file loading. From the <code>app</code> folder run <code>python3 -m http.server 8000</code> and open <code>http://localhost:8000</code>.";
+    return;
+  }
+  try{const rc=await fetch("data/co_monthly.json?v=1");if(rc.ok)CO=await rc.json();}catch(e){CO=null;}
+  const rules=SUM.series_rules;VIIRS_FIRST=strToIdx(rules.viirs_first);N20_FROM=strToIdx(rules.noaa20_from);HAS_SNPP=!!rules.has_snpp;
+  if(!HAS_SNPP)$("lgSnpp").hidden=true;
+  const ce=SUM.coverage_end.split("-").map(Number);
+  END_IDX=ce[0]*12+ce[1]-1;COV_DAY=ce[2];
+  const dim=new Date(ce[0],ce[1],0).getDate();
+  PARTIAL_IDX=ce[2]<dim?END_IDX:-1;LAST_COMPLETE=PARTIAL_IDX===END_IDX?END_IDX-1:END_IDX;
+  state.endIdx=END_IDX;
+  let a=90,b=-90,c=180,d=-180;for(const r of RECORDS){if(r.lat<a)a=r.lat;if(r.lat>b)b=r.lat;if(r.lon<c)c=r.lon;if(r.lon>d)d=r.lon;}
+  EXTENT={latMin:Math.floor(a*10)/10-0.2,latMax:Math.ceil(b*10)/10+0.2,lonMin:Math.floor(c*10)/10-0.2,lonMax:Math.ceil(d*10)/10+0.2};
+  state.bbox={...EXTENT};
+  $("eranote").textContent=`Months before ${MONTHS[VIIRS_FIRST%12]} ${Math.floor(VIIRS_FIRST/12)} are MODIS counts scaled to VIIRS level; later months are VIIRS counts as observed. Each month is compared only with years of its own kind.`;
+  $("annualnote").textContent=`Orange: MODIS scaled to VIIRS level. Blue: VIIRS observed from ${idxToStr(VIIRS_FIRST)}. Pale bars: before July 2002 (Terra only). The latest months come from near-real-time files, which can be revised.`;
+  bind();writeInputs();setupMap();selectLatest(false);recompute();
+}
+
+/* ---------- aggregation ---------- */
+function aggregate(pred){
+  const sets={modis:new Map(),snpp:new Map(),n20:new Map()},cells=state.metric==="cells";
+  for(const r of RECORDS){
+    const mp=sets[r.src];if(!mp||!pred(r))continue;
+    let s=mp.get(r.idx);
+    if(!s){s=cells?new Set():{n:0};mp.set(r.idx,s);}
+    if(cells)s.add(r.cd);else s.n++;
+  }
+  return sets;
+}
+function cnt(sets,src,i){const s=sets[src].get(i);return !s?0:(s.size!==undefined?s.size:s.n);}
+function harmValue(sets,i){
+  if(i>=N20_FROM)return cnt(sets,"n20",i);
+  if(HAS_SNPP&&i>=VIIRS_FIRST)return cnt(sets,"snpp",i);
+  return cnt(sets,"modis",i)*ratioK();
+}
+function sourceLabel(i){return i>=N20_FROM?"VIIRS NOAA-20":(HAS_SNPP&&i>=VIIRS_FIRST?"VIIRS Suomi NPP":"MODIS (scaled)");}
+
+function recompute(){
+  const sets=aggregate(r=>inBox(r,state.bbox)),rows=[];
+  for(let i=SERIES_START;i<=END_IDX;i++){
+    rows.push({idx:i,y:Math.floor(i/12),m:i%12+1,modis:cnt(sets,"modis",i),snpp:cnt(sets,"snpp",i),n20:cnt(sets,"n20",i),
+      value:harmValue(sets,i),src:sourceLabel(i),era:eraOf(i),terra:i<AQUA_START,partial:i===PARTIAL_IDX});
+  }
+  const by={MODIS:{},VIIRS:{}};for(const e of ["MODIS","VIIRS"])for(let m=1;m<=12;m++)by[e][m]=[];
+  for(const r of rows)if(r.idx>=AQUA_START&&r.idx<=LAST_COMPLETE)by[r.era][r.m].push(r.value);
+  for(const r of rows){const arr=by[r.era][r.m];r.nb=arr.length;r.median=median(arr);r.anom=r.value-r.median;
+    r.below=arr.length?100*arr.filter(x=>x<r.value-1e-9).length/arr.length:0;}
+  state.series=rows;renderAll();
+}
+
+/* ---------- rendering ---------- */
+function renderAll(){
+  $("metricname").textContent=state.metric==="cells"?"fire cells: unique 0.1° map cells with a detection per day":"raw hotspots";
+  renderHeat();renderCompare();renderAnnual();renderCO();renderMethod();drawMap();updateSummary();
+}
+function rowsInRange(){return state.series.filter(r=>r.idx>=state.startIdx&&r.idx<=state.endIdx);}
+function renderHeat(){
+  const rows=state.series,inr=rowsInRange();
+  const y0=Math.floor(state.startIdx/12),y1=Math.floor(state.endIdx/12);
+  const maxV=Math.max(1,...inr.map(r=>r.value));
+  const grid=$("heat");grid.innerHTML="";cellEls={};cellGrid=[];
+  const add=(cls,txt)=>{const d=document.createElement("div");d.className=cls;d.textContent=txt;grid.appendChild(d);};
+  add("h","");MONTHS.forEach(m=>add("h",m));add("h","May–Sep");
+  let rowN=0;
+  for(let y=y1;y>=y0;y--){
+    add("y",y);cellGrid[rowN]=[];
+    for(let m=1;m<=12;m++){
+      const i=y*12+m-1;const r=rows[i-SERIES_START];const b=document.createElement("button");b.className="cell";b.type="button";b.tabIndex=-1;
+      b.dataset.r=rowN;b.dataset.c=m-1;
+      if(!r||i<state.startIdx||i>state.endIdx){b.disabled=true;b.style.background="var(--zero)";b.setAttribute("aria-label",MONTHS[m-1]+" "+y+": outside range");grid.appendChild(b);cellGrid[rowN][m-1]=null;continue;}
+      const c=r.value>0?viridis(Math.sqrt(r.value/maxV)):null;
+      if(c){b.style.background=rgb(c);b.style.color=textFor(c);b.textContent=r.value<1?"<1":(r.value>=10||Number.isInteger(r.value)?Math.round(r.value):r.value.toFixed(1));}
+      else{b.style.background="var(--zero)";b.classList.add("zero");}
+      if(r.terra)b.classList.add("terra");if(r.partial)b.classList.add("partial");
+      if(r.value>0&&r.below>=90&&r.nb>=6&&!r.partial){const f=document.createElement("span");f.className="flag";f.textContent="●";b.appendChild(f);}
+      const note=r.partial?`partial month, ${COV_DAY} days`:(r.nb>=6?`${Math.round(r.below*r.nb/100)} of ${r.nb-1} other same-kind years had fewer`:"too few other same-kind years to compare");
+      b.setAttribute("aria-label",`${MONTHS[m-1]} ${y}: ${fmt(r.value)} ${unitName()}, ${note}`);
+      b.setAttribute("aria-pressed","false");
+      b.addEventListener("click",()=>selectCell(y,m,r.partial?COV_DAY:31));
+      grid.appendChild(b);cellEls[i]=b;cellGrid[rowN][m-1]=b;
+    }
+    let tot=0,has=false;for(let m=5;m<=9;m++){const r=rows[y*12+m-1-SERIES_START];if(r&&r.idx>=state.startIdx&&r.idx<=state.endIdx){tot+=r.value;has=true;}}
+    add("tot",has?fmt(tot):"");rowN++;
+  }
+  markSelected();
+  const stops=VIRIDIS.map((c,i)=>c+" "+Math.round(i/(VIRIDIS.length-1)*100)+"%").join(",");
+  $("ramp").style.background=`linear-gradient(90deg,${stops})`;
+  $("rampmid").textContent=fmt(maxV/4)+" (middle of ramp)";$("rampmax").textContent=fmt(maxV);
+}
+function markSelected(){
+  for(const b of Object.values(cellEls)){b.classList.remove("sel");b.setAttribute("aria-pressed","false");b.tabIndex=-1;}
+  let target=state.sel?cellEls[state.sel.y*12+state.sel.m-1]:null;
+  if(!target){target=Object.values(cellEls)[0]||null;}
+  else{target.classList.add("sel");target.setAttribute("aria-pressed","true");}
+  if(target)target.tabIndex=0;
+}
+function selectCell(y,m,maxDay){state.sel={y,m,maxDay};markSelected();renderCompare();}
+function monthYearValues(M,maxDay){
+  const sets=aggregate(r=>r.m===M&&r.d<=maxDay&&inBox(r,state.bbox)),out=[];
+  for(let y=2002;y<=Math.floor(END_IDX/12);y++){const i=y*12+M-1;if(i<AQUA_START||i>END_IDX)continue;out.push({y,idx:i,v:harmValue(sets,i),era:eraOf(i)});}
+  return out;
+}
+function renderCompare(){
+  const el=$("cmp");const s=state.sel;if(!s){el.textContent="Select a month in the calendar.";return;}
+  const vals=monthYearValues(s.m,s.maxDay);const cur=vals.find(v=>v.y===s.y);
+  if(!cur){el.innerHTML="<p class=hint>No data for this month (before July 2002 or outside the record).</p>";return;}
+  const same=vals.filter(v=>v.era===cur.era);
+  const past=same.filter(v=>v.y!==s.y&&v.idx<=LAST_COMPLETE);
+  const pv=past.map(v=>v.v),med=median(pv),n=pv.length;
+  const fewer=pv.filter(x=>x<cur.v-1e-9).length,equal=pv.filter(x=>Math.abs(x-cur.v)<=1e-9).length,more=n-fewer-equal;
+  const pctBelow=n?100*fewer/n:0;
+  const label=s.maxDay<31?`${MONTHS[s.m-1]} 1–${s.maxDay}, ${s.y}`:`${MONTHS[s.m-1]} ${s.y}`;
+  const kind=cur.era==="VIIRS"?"VIIRS-era":"MODIS-era";
+  let msg;
+  if(cur.v===0&&med===0)msg="No activity, which is typical for this time of year.";
+  else if(n<5)msg=`Only ${n} other ${kind} years, which is too few to judge.`;
+  else if(cur.v<3)msg="Very low count (under 3). Counts this small are within normal variation, so no verdict is given.";
+  else if(pctBelow>=90)msg=`Among the highest for this month: ${fewer} of ${n} other ${kind} years had fewer.`;
+  else if(pctBelow>=75)msg=`Above typical: ${fewer} of ${n} other ${kind} years had fewer.`;
+  else if(pctBelow<=25&&cur.v<med)msg=`Below typical: ${more} of ${n} other ${kind} years had more.`;
+  else msg="Typical for this month.";
+  const W=360,H=120,pad=18,bw=(W-pad)/Math.max(same.length,1);const mx=Math.max(1,...same.map(v=>v.v));
+  let bars="";same.forEach((v,k)=>{const h=(H-26)*v.v/mx;bars+=`<rect x="${pad+k*bw}" y="${H-16-h}" width="${Math.max(bw-2,2)}" height="${h}" fill="${v.y===s.y?"#d55e00":"#0072B2"}"><title>${v.y}: ${fmt(v.v)}</title></rect>`;});
+  const my=H-16-(H-26)*med/mx;
+  const lab=[same[0],same[same.length-1]].map((v,k)=>`<text x="${k?W-2:pad}" y="${H-3}" font-size="10" text-anchor="${k?"end":"start"}" fill="#4f5d6b">${v.y}</text>`).join("");
+  el.innerHTML=`<p style="margin:4px 0"><b>${label}</b>${s.maxDay<31?" (partial month, compared with the same days in other years)":""}</p>
+   <div class="stats"><div class="stat"><b>${fmt(cur.v)}</b><span>${unitName()}, ${label}</span></div>
+   <div class="stat"><b>${fmt(med)}</b><span>median of ${n} other ${kind} years</span></div>
+   <div class="stat"><b>${fewer} / ${equal} / ${more}</b><span>other years with fewer / same / more</span></div></div>
+   <p style="margin:4px 0"><b>${msg}</b></p>
+   <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${unitName()} for the same month in each ${kind} year; selected year highlighted"><line x1="${pad}" x2="${W}" y1="${my}" y2="${my}" stroke="#17202a" stroke-dasharray="4 3"/>${bars}${lab}<text x="${W-2}" y="${my-3}" font-size="10" text-anchor="end">median</text></svg>
+   <p class="hint">Bars show the same month in each ${kind} year. MODIS-era and VIIRS-era years are not mixed: a MODIS zero cannot be scaled into a VIIRS count, so mixing would make recent months look unusually active.</p>`;
+}
+function selectLatest(render=true){state.sel={y:Math.floor(END_IDX/12),m:END_IDX%12+1,maxDay:PARTIAL_IDX===END_IDX?COV_DAY:31};if(render){markSelected();renderCompare();}}
+function renderAnnual(){
+  const by={};for(const r of state.series)if(r.m>=5&&r.m<=9){by[r.y]=by[r.y]||{v:0,terra:false};by[r.y].v+=r.value;if(r.terra)by[r.y].terra=true;}
+  const ys=Object.keys(by).map(Number).filter(y=>y>=2001);const W=520,H=190,pad=30,bw=(W-pad)/ys.length;const mx=Math.max(1,...ys.map(y=>by[y].v));
+  const vy=Math.floor(VIIRS_FIRST/12)+(VIIRS_FIRST%12>4?1:0);
+  let s="";ys.forEach((y,k)=>{const h=(H-34)*by[y].v/mx,viirs=y>=vy;
+    s+=`<rect x="${pad+k*bw}" y="${H-20-h}" width="${bw-2}" height="${h}" fill="${viirs?"#0072B2":"#E69F00"}" opacity="${by[y].terra?0.45:1}"><title>${y}: ${fmt(by[y].v)}</title></rect>`;
+    if(k%3===0)s+=`<text x="${pad+k*bw}" y="${H-6}" font-size="10" fill="#4f5d6b">${y}</text>`;});
+  $("annual").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="May to September merged totals by year"><text x="0" y="12" font-size="10" fill="#4f5d6b">${fmt(mx)}</text>${s}</svg>`;
+}
+function renderCO(){
+  const card=$("coCard"),all=(CO&&CO.months)?CO.months:[];
+  if(!all.some(r=>r.co_total_1e18!=null||r.co_surface_ppbv!=null)){card.hidden=true;return;}
+  card.hidden=false;
+  const key=$("coMeasure").value,unit=key==="co_surface_ppbv"?"ppbv":"×10¹⁸ molecules/cm²",dec=key==="co_surface_ppbv"?0:2;
+  const years=[...new Set(all.map(r=>r.year))].sort((a,b)=>a-b);
+  const co={},days={};all.forEach(r=>{co[r.year+"-"+r.month]=r[key];days[r.year+"-"+r.month]=r.days_with_data;});
+  const ymean={};years.forEach(y=>{const v=[];for(let m=1;m<=12;m++){const x=co[y+"-"+m];if(x!=null)v.push(x);}ymean[y]=v.length?v.reduce((a,c)=>a+c,0)/v.length:null;});
+  const dev=(y,v)=>ymean[y]?100*(v/ymean[y]-1):0;
+  let amp=1;years.forEach(y=>{for(let m=1;m<=12;m++){const v=co[y+"-"+m];if(v!=null)amp=Math.max(amp,Math.abs(dev(y,v)));}});
+  const ax=Math.ceil(amp);
+  const fire=(y,m)=>{const r=state.series[y*12+m-1-SERIES_START];return r?r.value:null;};
+  let fmax=1;years.forEach(y=>{for(let m=1;m<=12;m++){const v=fire(y,m);if(v!=null&&v>fmax)fmax=v;}});
+  const W=300,H1=96,H2=62,padL=42,yb=H1+H2+8,H=yb+18,step=(W-padL-4)/12,mid=8+(H1-16)/2;
+  const html=years.map(y=>{
+    let path="",dots="",bars="",labs="",gap=true;
+    for(let m=1;m<=12;m++){
+      const x=padL+(m-0.5)*step,v=co[y+"-"+m];
+      if(v!=null){const d=dev(y,v),yy=mid-(H1-16)/2*d/ax;path+=(gap?"M":"L")+x.toFixed(1)+" "+yy.toFixed(1)+" ";gap=false;
+        dots+=`<circle cx="${x.toFixed(1)}" cy="${yy.toFixed(1)}" r="3" fill="#0072B2"><title>${MONTHS[m-1]} ${y}: ${v.toFixed(dec)} ${unit} (${d>=0?"+":""}${d.toFixed(1)}% against this year's average), ${days[y+"-"+m]} days of readings</title></circle>`;}
+      else gap=true;
+      const f=fire(y,m);
+      if(f!=null&&f>0){const bh=Math.max((H2-8)*f/fmax,1);bars+=`<rect x="${(x-step*0.35).toFixed(1)}" y="${(yb-bh).toFixed(1)}" width="${(step*0.7).toFixed(1)}" height="${bh.toFixed(1)}" fill="#B34700"><title>${MONTHS[m-1]} ${y}: ${fmt(f)} ${unitName()}</title></rect>`;}
+      labs+=`<text x="${x.toFixed(1)}" y="${yb+13}" font-size="10" text-anchor="middle" fill="#4f5d6b">${MONTHS[m-1][0]}</text>`;
+    }
+    return `<div><h3 style="margin:0 0 2px;font-size:15px">${y}</h3>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${y}: monthly carbon monoxide around the island as a percent above or below that year's own average, and merged ${unitName()} for the selected area, by month. The numbers are in the table below.">
+      <line x1="${padL}" x2="${W-4}" y1="${mid}" y2="${mid}" stroke="#c5ccd3" stroke-dasharray="3 3"/>
+      <line x1="${padL}" x2="${W-4}" y1="${yb}" y2="${yb}" stroke="#8793a1"/>
+      <text x="${padL-4}" y="14" font-size="10" text-anchor="end" fill="#4f5d6b">+${ax}%</text>
+      <text x="${padL-4}" y="${mid+4}" font-size="10" text-anchor="end" fill="#4f5d6b">avg</text>
+      <text x="${padL-4}" y="${H1}" font-size="10" text-anchor="end" fill="#4f5d6b">−${ax}%</text>
+      <text x="${padL-4}" y="${yb-H2+12}" font-size="10" text-anchor="end" fill="#4f5d6b">${fmt(fmax)}</text>
+      <path d="${path}" fill="none" stroke="#0072B2" stroke-width="1.6"/>${dots}${bars}${labs}</svg></div>`;
+  }).join("");
+  $("coChart").innerHTML=html;
+  const b=state.bbox,near=(a,c)=>Math.abs(a-c)<0.15,matches=near(b.latMin,ISLAND.latMin)&&near(b.latMax,ISLAND.latMax)&&near(b.lonMin,ISLAND.lonMin)&&near(b.lonMax,ISLAND.lonMax);
+  const have=all.filter(r=>r[key]!=null),dmin=have.length?Math.min(...have.map(r=>r.days_with_data)):0,dmax=have.length?Math.max(...have.map(r=>r.days_with_data)):0;
+  const left=all.filter(r=>r[key]==null).map(r=>`${MONTHS[r.month-1]} ${r.year} (${r.days_with_data} days)`);
+  $("coNote").innerHTML=(matches?"":"<b>Your selected area is not the island, so the fire bars and the CO dots cover different ground. Click “Island of Newfoundland” above to match them.</b> ")+
+    `Blue: CO as a percent above or below that year's own average (from −${ax}% to +${ax}%). This hides differences in level between years, which matter because the data product version changes (V18 for 2012, 2013, 2018 and 2019, V20 for 2024). Orange: ${unitName()} on one shared scale (0 to ${fmt(fmax)}). Years shown: ${years.join(", ")}. Each plotted month has ${dmin} to ${dmax} days of readings at about 22 km resolution. `+
+    (left.length?`Months with fewer than ${CO.min_days||15} days are left out: ${left.join(", ")}. `:"")+
+    `CO also follows the seasons and carries smoke from fires in other provinces, and the box includes nearby sea and small parts of the Gulf, southern Labrador and Quebec. A high month is not proof of a local fire.`;
+  const mrow=m=>`<tr><td>${MONTHS[m-1]}</td>`+years.map(y=>{const v=co[y+"-"+m],f=fire(y,m);return `<td>${v==null?"–":v.toFixed(dec)}</td><td>${f==null?"–":fmt(f)}</td>`;}).join("")+"</tr>";
+  $("coTable").innerHTML=`<table><tr><th rowspan="2">Month</th>${years.map(y=>`<th colspan="2">${y}</th>`).join("")}</tr><tr>${years.map(()=>`<th>CO (${unit})</th><th>${unitName()[0].toUpperCase()+unitName().slice(1)}</th>`).join("")}</tr>${[1,2,3,4,5,6,7,8,9,10,11,12].map(mrow).join("")}</table>`;
+}
+function renderMethod(){
+  const R=SUM.ratios,rules=SUM.series_rules,ck=SUM.checks||{};
+  const row=(name,s)=>`<tr><td>${name}</td><td>${s.k.toFixed(2)}</td><td>${s.yearly_ratio_min.toFixed(1)} to ${s.yearly_ratio_max.toFixed(1)}</td><td>${s.pearson_r.toFixed(3)}</td><td>${Math.round(s.cv_median_pct_err)}%</td><td>${s.monthly_cv_median_pct_err==null?"n/a":Math.round(s.monthly_cv_median_pct_err)+"%"}</td></tr>`;
+  const n21=ck.noaa21_over_noaa20_yearly?Object.values(ck.noaa21_over_noaa20_yearly).filter(v=>v!=null):[];
+  const n21txt=n21.length?` NOAA-21 is not added. Its yearly totals are ${Math.min(...n21).toFixed(2)} to ${Math.max(...n21).toFixed(2)} times those of NOAA-20 (2023–2025).`:"";
+  const sn=ck.snpp_over_noaa20_yearly?Object.values(ck.snpp_over_noaa20_yearly).filter(v=>v!=null):[];
+  const sntxt=sn.length?` Suomi NPP totals are ${Math.min(...sn).toFixed(2)} to ${Math.max(...sn).toFixed(2)} times those of NOAA-20 in 2018–2025. The low years are explained by gaps in the Suomi NPP record (for example no data from 26 July to 14 August 2022, and from 10 to 29 July 2024). That is why NOAA-20 replaces Suomi NPP as soon as it starts.`:"";
+  const first=HAS_SNPP?"Suomi NPP from "+rules.viirs_first+" to March 2018, then NOAA-20":"NOAA-20 from "+rules.viirs_first;
+  $("method").innerHTML=`<p>VIIRS detects smaller fires than MODIS, so raw counts from the two sensors cannot be compared. We fit one ratio on the years both ran a full season (${rules.fit_years[0]}–${rules.fit_years[rules.fit_years.length-1]}, ${rules.fit_years.length} seasons), using May–September totals because monthly counts in the province are small. MODIS months before ${rules.viirs_first} are multiplied by that ratio. From ${rules.viirs_first} the VIIRS record is used as observed: ${first}.${sntxt}${n21txt}</p>
+  <p>Data are cleaned first. Detections flagged as industrial, volcanic or offshore are removed, and so are low-confidence detections. The recent near-real-time rows carry no such flag and are kept.</p>
+  <div style="overflow-x:auto"><table><tr><th>Count</th><th>VIIRS / MODIS ratio</th><th>Yearly ratio range</th><th>Correlation (r)</th><th>Season error*</th><th>Month error*</th></tr>
+  ${row("Fire cells",R.cells)}${row("Raw hotspots",R.hotspots)}</table></div>
+  <p class="hint">*Median error when each season is predicted from the other seasons (leave one year out). Season totals are predicted far better than single months.</p>
+  <p class="hint"><b>Limits.</b> The ratio is not constant: it changes from year to year (range above) and by region (about 1.4 in Labrador and 2.9 on the island with the current fit), so numbers for a small area are indicative, not exact. Fire cells compress very large fires, and raw hotspot counts show them more strongly. A MODIS zero stays zero when scaled, which is why each month is compared only with years of its own kind. Data through ${SUM.coverage_end}; the latest month is partial.</p>`;
+}
+function updateSummary(){
+  const b=state.bbox,n=RECORDS.filter(r=>inBox(r,b)&&r.idx>=state.startIdx&&r.idx<=state.endIdx).length;
+  $("areasummary").textContent=`Area: ${b.latMin.toFixed(1)} to ${b.latMax.toFixed(1)}°N, ${Math.abs(b.lonMin).toFixed(1)} to ${Math.abs(b.lonMax).toFixed(1)}°W. ${n.toLocaleString()} cleaned detections in this area and date range.`;
+  $("dlinfo").textContent=`The hotspot file has the ${n.toLocaleString()} detections counted above, with a source column (modis, snpp, n20, n21). The monthly file has one row per month in the selected range.`;
+}
+
+/* ---------- map ---------- */
+let cv,ctx,proj;
+function setupMap(){
+  cv=$("map");ctx=cv.getContext("2d");
+  let drag=null;
+  const pos=e=>{const r=cv.getBoundingClientRect();return {x:(e.clientX-r.left)*(cv.width/r.width),y:(e.clientY-r.top)*(cv.height/r.height)};};
+  cv.addEventListener("pointerdown",e=>{if(e.pointerType==="touch"&&!state.drawMode)return;cv.setPointerCapture(e.pointerId);drag={a:pos(e),b:pos(e)};});
+  cv.addEventListener("pointermove",e=>{if(!drag)return;drag.b=pos(e);drawMap(drag);});
+  cv.addEventListener("pointerup",e=>{if(!drag)return;drag.b=pos(e);const a=drag.a,b=drag.b;drag=null;
+    if(Math.abs(a.x-b.x)<6||Math.abs(a.y-b.y)<6){drawMap();return;}
+    const p1=unproj(Math.min(a.x,b.x),Math.max(a.y,b.y)),p2=unproj(Math.max(a.x,b.x),Math.min(a.y,b.y));
+    state.bbox={latMin:p1.lat,lonMin:p1.lon,latMax:p2.lat,lonMax:p2.lon};setMsg("");writeInputs();recompute();});
+  cv.addEventListener("pointercancel",()=>{drag=null;drawMap();});
+  window.addEventListener("resize",()=>drawMap());
+}
+function layout(){
+  const w=cv.clientWidth||600,dpr=window.devicePixelRatio||1;
+  const midLat=(EXTENT.latMin+EXTENT.latMax)/2,kx=Math.cos(midLat*Math.PI/180);
+  const spanX=(EXTENT.lonMax-EXTENT.lonMin)*kx,spanY=EXTENT.latMax-EXTENT.latMin;
+  const h=Math.min(Math.round(w*spanY/spanX),720);cv.width=w*dpr;cv.height=h*dpr;cv.style.height=h+"px";
+  const s=Math.min(cv.width/spanX,cv.height/spanY);
+  proj={kx,s,ox:(cv.width-spanX*s)/2,oy:(cv.height-spanY*s)/2};
+}
+function toXY(lat,lon){return {x:proj.ox+(lon-EXTENT.lonMin)*proj.kx*proj.s,y:proj.oy+(EXTENT.latMax-lat)*proj.s};}
+function unproj(x,y){return {lat:EXTENT.latMax-(y-proj.oy)/proj.s,lon:EXTENT.lonMin+(x-proj.ox)/(proj.kx*proj.s)};}
+function drawMap(drag){
+  if(!cv||!RECORDS.length)return;layout();
+  const dpr=window.devicePixelRatio||1;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.strokeStyle="#e3e8ee";ctx.fillStyle="#5d6b7a";ctx.font=`${11*dpr}px system-ui`;ctx.lineWidth=1;
+  for(let la=Math.ceil(EXTENT.latMin/2)*2;la<=EXTENT.latMax;la+=2){const p=toXY(la,EXTENT.lonMin);ctx.beginPath();ctx.moveTo(0,p.y);ctx.lineTo(cv.width,p.y);ctx.stroke();ctx.fillText(la+"°N",4,p.y-3);}
+  for(let lo=Math.ceil(EXTENT.lonMin/4)*4;lo<=EXTENT.lonMax;lo+=4){const p=toXY(EXTENT.latMin,lo);ctx.beginPath();ctx.moveTo(p.x,0);ctx.lineTo(p.x,cv.height);ctx.stroke();ctx.fillText(Math.abs(lo)+"°W",p.x+3,cv.height-4);}
+  const col={modis:"#B45F06",snpp:"#009E73",n20:"#0072B2",n21:"#777777"},d=dpr*2;
+  for(const pass of [false,true]){
+    ctx.globalAlpha=pass?0.8:0.12;
+    for(const r of RECORDS){
+      if(r.idx<state.startIdx||r.idx>state.endIdx||inBox(r,state.bbox)!==pass)continue;
+      const p=toXY(r.lat,r.lon);ctx.fillStyle=col[r.src]||"#777";ctx.fillRect(p.x-d/2,p.y-d/2,d,d);
+    }
+  }
+  ctx.globalAlpha=1;
+  const b=drag?{x:Math.min(drag.a.x,drag.b.x),y:Math.min(drag.a.y,drag.b.y),w:Math.abs(drag.a.x-drag.b.x),h:Math.abs(drag.a.y-drag.b.y)}:
+    (()=>{const a=toXY(state.bbox.latMax,state.bbox.lonMin),c=toXY(state.bbox.latMin,state.bbox.lonMax);return {x:a.x,y:a.y,w:c.x-a.x,h:c.y-a.y};})();
+  ctx.strokeStyle="#d55e00";ctx.lineWidth=2*dpr;ctx.setLineDash([8,5]);ctx.strokeRect(b.x,b.y,b.w,b.h);ctx.setLineDash([]);
+}
+
+/* ---------- inputs, downloads, keyboard ---------- */
+function writeInputs(){const b=state.bbox;$("latMax").value=b.latMax.toFixed(2);$("latMin").value=b.latMin.toFixed(2);$("lonMin").value=b.lonMin.toFixed(2);$("lonMax").value=b.lonMax.toFixed(2);}
+function download(name,text){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:"text/csv"}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function applyRange(){
+  const re=/^\d{4}-(0[1-9]|1[0-2])$/,sv=$("start").value.trim(),ev=$("end").value.trim();
+  if(!re.test(sv)||!re.test(ev)){setMsg("Dates must look like 2018-04 (year, dash, two-digit month).");$("start").value=idxToStr(state.startIdx);$("end").value=idxToStr(state.endIdx);return;}
+  let a=Math.max(strToIdx(sv),SERIES_START),b=Math.min(strToIdx(ev),END_IDX);
+  if(a>b)[a,b]=[b,a];
+  setMsg("");state.startIdx=a;state.endIdx=b;$("start").value=idxToStr(a);$("end").value=idxToStr(b);renderAll();
+}
+function bind(){
+  $("apply").onclick=()=>{
+    const f=["latMax","latMin","lonMin","lonMax"],raw=f.map(id=>$(id).value.trim());
+    if(raw.some(v=>v==="")){setMsg("Fill in all four boxes.");return;}
+    const [latMax,latMin,lonMin,lonMax]=raw.map(Number);
+    if([latMax,latMin,lonMin,lonMax].some(v=>!Number.isFinite(v))){setMsg("Area values must be numbers.");return;}
+    if(Math.abs(latMax)>90||Math.abs(latMin)>90||Math.abs(lonMin)>180||Math.abs(lonMax)>180){setMsg("Latitude must be between -90 and 90, longitude between -180 and 180.");return;}
+    if(lonMin>0||lonMax>0){setMsg("Longitude must be negative here, because Newfoundland and Labrador are west of Greenwich (for example -58).");return;}
+    if(latMin>=latMax||lonMin>=lonMax){setMsg("South must be below north, and west must be left of east (for example -58 is west of -54).");return;}
+    setMsg("");state.bbox={latMax,latMin,lonMin,lonMax};recompute();};
+  $("island").onclick=()=>{setMsg("");state.bbox={...ISLAND};writeInputs();recompute();};
+  $("coMeasure").onchange=renderCO;
+  $("reset").onclick=()=>{setMsg("");state.bbox={...EXTENT};writeInputs();recompute();};
+  $("drawmode").onclick=()=>{state.drawMode=!state.drawMode;$("drawmode").setAttribute("aria-pressed",state.drawMode);$("drawmode").textContent="Draw area on map by touch: "+(state.drawMode?"on":"off");$("map").classList.toggle("draw",state.drawMode);};
+  $("start").onchange=applyRange;$("end").onchange=applyRange;
+  $("metric").onchange=()=>{state.metric=$("metric").value;recompute();};
+  $("selLatest").onclick=()=>selectLatest();
+  $("selComplete").onclick=()=>selectCell(Math.floor(LAST_COMPLETE/12),LAST_COMPLETE%12+1,31);
+  $("selPeak").onclick=()=>{const r=rowsInRange().filter(x=>!x.partial).sort((a,b)=>b.value-a.value)[0];if(r)selectCell(r.y,r.m,31);};
+  $("heat").addEventListener("keydown",e=>{
+    const t=e.target;if(!t.classList||!t.classList.contains("cell"))return;
+    const dr={ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1]}[e.key];if(!dr)return;
+    e.preventDefault();let r=+t.dataset.r,c=+t.dataset.c;
+    for(let k=0;k<40;k++){r+=dr[0];c+=dr[1];if(r<0||r>=cellGrid.length||c<0||c>11)return;
+      const n=cellGrid[r][c];if(n){t.tabIndex=-1;n.tabIndex=0;n.focus();return;}}
+  });
+  $("dlHot").onclick=()=>{const b=state.bbox,rows=RECORDS.filter(r=>inBox(r,b)&&r.idx>=state.startIdx&&r.idx<=state.endIdx);
+    download(`nl_fire_hotspots_${idxToStr(state.startIdx)}_${idxToStr(state.endIdx)}.csv`,[CSVHEAD,...rows.map(r=>r.line)].join("\n")+"\n");};
+  $("dlSeries").onclick=()=>{
+    const u=state.metric,b=state.bbox;
+    const head=["month","area_south","area_north","area_west","area_east","count_type",`modis_${u}`,`snpp_${u}`,`noaa20_${u}`,`merged_${u}`,"merged_source","era","terra_only","partial_month","baseline_median_same_era","baseline_years","difference_from_median","percent_of_same_era_years_below"].join(",");
+    const rows=rowsInRange().map(r=>[idxToStr(r.idx),b.latMin.toFixed(2),b.latMax.toFixed(2),b.lonMin.toFixed(2),b.lonMax.toFixed(2),u,r.modis,HAS_SNPP?r.snpp:"",r.n20,r.value.toFixed(2),r.src,r.era,r.terra,r.partial,r.median.toFixed(2),r.nb,r.anom.toFixed(2),r.nb?r.below.toFixed(1):""].join(","));
+    download(`nl_fire_monthly_${idxToStr(state.startIdx)}_${idxToStr(state.endIdx)}.csv`,[head,...rows].join("\n")+"\n");};
+}
+init();
+</script>
+</body>
+</html>

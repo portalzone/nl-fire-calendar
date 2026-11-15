@@ -1,41 +1,78 @@
 {
   "area": "Newfoundland and Labrador",
   "coverage_end": "2026-11-07",
+  "primary_metric": "cells",
+  "series_rules": {
+    "viirs_first": "2012-02",
+    "noaa20_from": "2018-04",
+    "has_snpp": true,
+    "fit_years": [
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  },
   "filters": {
     "modis_min_confidence": 30,
     "viirs_confidence": "nominal or high",
-    "type": "0 (presumed vegetation fire); NRT rows have no type and are kept",
+    "type": "0 (presumed vegetation fire); near-real-time rows carry no type and are kept",
     "fire_cell_size_deg": 0.1
   },
-  "primary_metric": "cells",
   "sources": {
     "modis": {
       "rows_archive": 6546,
       "rows_nrt": 3,
-      "archive_last_date": "2026-08-27",
-      "nrt_first_date": "2026-09-02",
-      "gap_days_between_archive_and_nrt": 6,
+      "archive_last_detection": "2026-08-27",
+      "nrt_first_detection": "2026-09-02",
       "duplicates_removed": 0,
       "removed_non_vegetation": {
         "2": 7,
         "3": 5
       },
+      "rows_without_type_kept": 3,
       "removed_low_confidence": 1130,
       "rows_kept": 5407,
       "first_date": "2001-05-09",
       "last_date": "2026-09-02"
     },
+    "snpp": {
+      "rows_archive": 21485,
+      "rows_nrt": 11,
+      "archive_last_detection": "2026-07-29",
+      "nrt_first_detection": "2026-08-01",
+      "duplicates_removed": 0,
+      "removed_non_vegetation": {
+        "2": 606,
+        "3": 241
+      },
+      "rows_without_type_kept": 11,
+      "removed_low_confidence": 1108,
+      "rows_kept": 19541,
+      "first_date": "2012-02-06",
+      "last_date": "2026-10-11"
+    },
     "n20": {
       "rows_archive": 9641,
       "rows_nrt": 11,
-      "archive_last_date": "2026-07-30",
-      "nrt_first_date": "2026-08-01",
-      "gap_days_between_archive_and_nrt": 2,
+      "archive_last_detection": "2026-07-30",
+      "nrt_first_detection": "2026-08-01",
       "duplicates_removed": 0,
       "removed_non_vegetation": {
         "2": 199,
         "3": 175
       },
+      "rows_without_type_kept": 11,
       "removed_low_confidence": 429,
       "rows_kept": 8849,
       "first_date": "2018-04-13",
@@ -44,13 +81,13 @@
     "n21": {
       "rows_archive": 8381,
       "rows_nrt": 9,
-      "archive_last_date": "2026-07-29",
-      "nrt_first_date": "2026-08-02",
-      "gap_days_between_archive_and_nrt": 4,
+      "archive_last_detection": "2026-07-29",
+      "nrt_first_detection": "2026-08-02",
       "duplicates_removed": 0,
       "removed_non_vegetation": {
         "3": 154
       },
+      "rows_without_type_kept": 9,
       "removed_low_confidence": 426,
       "rows_kept": 7810,
       "first_date": "2023-04-24",
@@ -59,9 +96,15 @@
   },
   "ratios": {
     "hotspots": {
-      "k": 5.828373015873016,
-      "n_years": 8,
+      "k": 4.662598318416056,
+      "n_years": 14,
       "years": [
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
         2018,
         2019,
         2020,
@@ -71,81 +114,155 @@
         2024,
         2025
       ],
-      "pearson_r": 0.9076129192199164,
-      "spearman_rho": 0.9523809523809524,
-      "cv_median_pct_err": 66.5856138023637,
-      "cv_mean_abs_err": 313.1238169013011,
+      "pearson_r": 0.9777514673818773,
+      "spearman_rho": 0.9736263736263736,
+      "cv_median_pct_err": 28.72170094690797,
+      "cv_mean_abs_err": 266.694765167858,
+      "monthly_cv_median_pct_err": 79.64429361488185,
+      "monthly_cv_n_months": 67,
+      "yearly_ratios": {
+        "2012": 4.219275549805951,
+        "2013": 4.439461883408072,
+        "2014": 4.270462633451957,
+        "2015": 5.181818181818182,
+        "2016": 2.891156462585034,
+        "2017": 9.0,
+        "2018": 2.7777777777777777,
+        "2019": 2.0,
+        "2020": 3.533333333333333,
+        "2021": 2.6666666666666665,
+        "2022": 6.147435897435898,
+        "2023": 4.802139037433155,
+        "2024": 3.958477508650519,
+        "2025": 8.641935483870968
+      },
+      "yearly_ratio_min": 2.0,
+      "yearly_ratio_max": 9.0,
       "leave_one_year_out": [
+        {
+          "year": 2012,
+          "modis": 1546.0,
+          "viirs": 6523.0,
+          "predicted": 7703.28,
+          "abs_err": 1180.28,
+          "pct_err": 18.09
+        },
+        {
+          "year": 2013,
+          "modis": 669.0,
+          "viirs": 2970.0,
+          "predicted": 3152.37,
+          "abs_err": 182.37,
+          "pct_err": 6.14
+        },
+        {
+          "year": 2014,
+          "modis": 281.0,
+          "viirs": 1200.0,
+          "predicted": 1319.28,
+          "abs_err": 119.28,
+          "pct_err": 9.94
+        },
+        {
+          "year": 2015,
+          "modis": 33.0,
+          "viirs": 171.0,
+          "predicted": 153.71,
+          "abs_err": 17.29,
+          "pct_err": 10.11
+        },
+        {
+          "year": 2016,
+          "modis": 147.0,
+          "viirs": 425.0,
+          "predicted": 696.22,
+          "abs_err": 271.22,
+          "pct_err": 63.82
+        },
+        {
+          "year": 2017,
+          "modis": 3.0,
+          "viirs": 27.0,
+          "predicted": 13.98,
+          "abs_err": 13.02,
+          "pct_err": 48.23
+        },
         {
           "year": 2018,
           "modis": 9.0,
           "viirs": 25.0,
-          "predicted": 52.7,
-          "abs_err": 27.7,
-          "pct_err": 110.81
+          "predicted": 42.0,
+          "abs_err": 17.0,
+          "pct_err": 68.02
         },
         {
           "year": 2019,
           "modis": 12.0,
           "viirs": 24.0,
-          "predicted": 70.49,
-          "abs_err": 46.49,
-          "pct_err": 193.72
+          "predicted": 56.06,
+          "abs_err": 32.06,
+          "pct_err": 133.56
         },
         {
           "year": 2020,
           "modis": 30.0,
           "viirs": 106.0,
-          "predicted": 176.96,
-          "abs_err": 70.96,
-          "pct_err": 66.95
+          "predicted": 140.16,
+          "abs_err": 34.16,
+          "pct_err": 32.22
         },
         {
           "year": 2021,
           "modis": 15.0,
           "viirs": 40.0,
-          "predicted": 88.14,
-          "abs_err": 48.14,
-          "pct_err": 120.35
+          "predicted": 70.06,
+          "abs_err": 30.06,
+          "pct_err": 75.15
         },
         {
           "year": 2022,
           "modis": 156.0,
           "viirs": 959.0,
-          "predicted": 900.11,
-          "abs_err": 58.89,
-          "pct_err": 6.14
+          "predicted": 717.13,
+          "abs_err": 241.87,
+          "pct_err": 25.22
         },
         {
           "year": 2023,
           "modis": 187.0,
           "viirs": 898.0,
-          "predicted": 1133.62,
-          "abs_err": 235.62,
-          "pct_err": 26.24
+          "predicted": 870.51,
+          "abs_err": 27.49,
+          "pct_err": 3.06
         },
         {
           "year": 2024,
           "modis": 289.0,
           "viirs": 1144.0,
-          "predicted": 1901.61,
-          "abs_err": 757.61,
-          "pct_err": 66.22
+          "predicted": 1364.8,
+          "abs_err": 220.8,
+          "pct_err": 19.3
         },
         {
           "year": 2025,
           "modis": 310.0,
           "viirs": 2679.0,
-          "predicted": 1419.43,
-          "abs_err": 1259.57,
-          "pct_err": 47.02
+          "predicted": 1332.16,
+          "abs_err": 1346.84,
+          "pct_err": 50.27
         }
       ]
     },
     "cells": {
-      "k": 1.6902985074626866,
-      "n_years": 8,
+      "k": 1.6150895140664963,
+      "n_years": 14,
       "years": [
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
         2018,
         2019,
         2020,
@@ -155,74 +272,142 @@
         2024,
         2025
       ],
-      "pearson_r": 0.983527838716643,
-      "spearman_rho": 0.9819277108433735,
-      "cv_median_pct_err": 16.14146722842375,
-      "cv_mean_abs_err": 8.957243113007095,
+      "pearson_r": 0.9975830504237845,
+      "spearman_rho": 0.972466960352423,
+      "cv_median_pct_err": 14.571675498155383,
+      "cv_mean_abs_err": 8.742098818746928,
+      "monthly_cv_median_pct_err": 59.62301587301587,
+      "monthly_cv_n_months": 67,
+      "yearly_ratios": {
+        "2012": 1.5444015444015444,
+        "2013": 1.595890410958904,
+        "2014": 1.403225806451613,
+        "2015": 1.5555555555555556,
+        "2016": 1.6153846153846154,
+        "2017": 6.666666666666667,
+        "2018": 2.4285714285714284,
+        "2019": 1.8888888888888888,
+        "2020": 2.066666666666667,
+        "2021": 2.4444444444444446,
+        "2022": 1.673913043478261,
+        "2023": 1.5294117647058822,
+        "2024": 1.4285714285714286,
+        "2025": 1.8703703703703705
+      },
+      "yearly_ratio_min": 1.403225806451613,
+      "yearly_ratio_max": 6.666666666666667,
       "leave_one_year_out": [
+        {
+          "year": 2012,
+          "modis": 259.0,
+          "viirs": 400.0,
+          "predicted": 427.37,
+          "abs_err": 27.37,
+          "pct_err": 6.84
+        },
+        {
+          "year": 2013,
+          "modis": 146.0,
+          "viirs": 233.0,
+          "predicted": 236.45,
+          "abs_err": 3.45,
+          "pct_err": 1.48
+        },
+        {
+          "year": 2014,
+          "modis": 62.0,
+          "viirs": 87.0,
+          "predicted": 101.27,
+          "abs_err": 14.27,
+          "pct_err": 16.4
+        },
+        {
+          "year": 2015,
+          "modis": 18.0,
+          "viirs": 28.0,
+          "predicted": 29.1,
+          "abs_err": 1.1,
+          "pct_err": 3.92
+        },
+        {
+          "year": 2016,
+          "modis": 26.0,
+          "viirs": 42.0,
+          "predicted": 41.99,
+          "abs_err": 0.01,
+          "pct_err": 0.02
+        },
+        {
+          "year": 2017,
+          "modis": 3.0,
+          "viirs": 20.0,
+          "predicted": 4.79,
+          "abs_err": 15.21,
+          "pct_err": 76.07
+        },
         {
           "year": 2018,
           "modis": 7.0,
           "viirs": 17.0,
-          "predicted": 11.69,
-          "abs_err": 5.31,
-          "pct_err": 31.21
+          "predicted": 11.25,
+          "abs_err": 5.75,
+          "pct_err": 33.8
         },
         {
           "year": 2019,
           "modis": 9.0,
           "viirs": 17.0,
-          "predicted": 15.15,
-          "abs_err": 1.85,
-          "pct_err": 10.88
+          "predicted": 14.51,
+          "abs_err": 2.49,
+          "pct_err": 14.66
         },
         {
           "year": 2020,
           "modis": 15.0,
           "viirs": 31.0,
-          "predicted": 25.02,
-          "abs_err": 5.98,
-          "pct_err": 19.29
+          "predicted": 24.09,
+          "abs_err": 6.91,
+          "pct_err": 22.28
         },
         {
           "year": 2021,
           "modis": 9.0,
           "viirs": 22.0,
-          "predicted": 14.98,
-          "abs_err": 7.02,
-          "pct_err": 31.92
+          "predicted": 14.45,
+          "abs_err": 7.55,
+          "pct_err": 34.32
         },
         {
           "year": 2022,
           "modis": 46.0,
           "viirs": 77.0,
-          "predicted": 77.91,
-          "abs_err": 0.91,
-          "pct_err": 1.18
+          "predicted": 74.12,
+          "abs_err": 2.88,
+          "pct_err": 3.73
         },
         {
           "year": 2023,
           "modis": 51.0,
           "viirs": 78.0,
-          "predicted": 88.13,
-          "abs_err": 10.13,
-          "pct_err": 12.99
+          "predicted": 82.67,
+          "abs_err": 4.67,
+          "pct_err": 5.99
         },
         {
           "year": 2024,
           "modis": 77.0,
           "viirs": 110.0,
-          "predicted": 138.28,
-          "abs_err": 28.28,
-          "pct_err": 25.71
+          "predicted": 125.93,
+          "abs_err": 15.93,
+          "pct_err": 14.48
         },
         {
           "year": 2025,
           "modis": 54.0,
           "viirs": 101.0,
-          "predicted": 88.82,
-          "abs_err": 12.18,
-          "pct_err": 12.06
+          "predicted": 86.19,
+          "abs_err": 14.81,
+          "pct_err": 14.66
         }
       ]
     }
@@ -231,32 +416,32 @@
     "month": "2026-11",
     "through_day": 7,
     "current": 0.0,
+    "same_era_years": 14,
     "historical_median": 0.0,
-    "historical_mean": 0.20833333333333334,
-    "n_past_years": 24,
-    "share_of_past_years_at_or_below": 0.8333333333333334
+    "years_fewer": 0,
+    "years_equal": 8,
+    "years_more": 6
   },
-  "noaa21_cross_check": {
-    "years": [
-      2023,
-      2024,
-      2025
-    ],
-    "n21": [
-      948,
-      1407,
-      2482
-    ],
-    "n20": [
-      898,
-      1144,
-      2679
-    ],
-    "ratio_n21_over_n20": 1.0245710654522346
+  "checks": {
+    "noaa21_over_noaa20_yearly": {
+      "2023": 1.0256410256410255,
+      "2024": 1.1545454545454545,
+      "2025": 1.0
+    },
+    "snpp_over_noaa20_yearly": {
+      "2018": 1.2352941176470589,
+      "2019": 1.0,
+      "2020": 1.032258064516129,
+      "2021": 0.9545454545454546,
+      "2022": 0.38961038961038963,
+      "2023": 1.0256410256410255,
+      "2024": 0.7909090909090909,
+      "2025": 0.9900990099009901
+    }
   },
   "notes": [
-    "Nov 2000 to Jun 2002 is MODIS Terra only (Aqua starts 2002-07); excluded from baseline.",
-    "Latest month is partial; compare with month_to_date, not the monthly baseline.",
-    "Ratio fitted on May-Sep season totals over 2018-2025."
+    "Nov 2000 to Jun 2002 is MODIS Terra only; excluded from the baseline.",
+    "The latest month is partial; use month_to_date for it.",
+    "Each month is compared with years of the same era only."
   ]
 }
