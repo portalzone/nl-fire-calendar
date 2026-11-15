@@ -4,10 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NL Fire Calendar</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2314213d'/%3E%3Cpath d='M16 4c1 5 7 8 7 15a7 7 0 0 1-14 0c0-4 2-6 3-8 1 3 2 4 3 4-1-4 0-8 1-11z' fill='%23E69F00'/%3E%3Cpath d='M16 16c1 2 3 3 3 6a3 3 0 0 1-6 0c0-2 2-3 3-6z' fill='%23fde725'/%3E%3C/svg%3E">
 <meta name="description" content="Burning activity calendar for Newfoundland and Labrador that merges NASA MODIS and VIIRS fire hotspots into one record.">
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--ink:#17202a;--muted:#4f5d6b;--line:#c5ccd3;--accent:#0072B2;--zero:#eceff1}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-padding-top:64px}
 body{margin:0;font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
 header{background:#14213d;color:#fff;padding:18px 20px}
 header h1{margin:0 0 2px;font-size:22px}
@@ -57,6 +60,21 @@ footer{max-width:1200px;margin:0 auto;padding:8px 16px 32px;color:var(--muted);f
 .stat span.big{display:block;font-size:26px;font-weight:700;color:var(--ink)}
 ul.how{margin:4px 0 0;padding-left:20px}
 ul.how li{margin:3px 0}
+.tabbar{position:sticky;top:0;z-index:5;background:var(--bg);padding:4px 0 0;margin:0 0 12px;border-bottom:1px solid #8793a1}
+[role=tablist]{display:flex;gap:4px;overflow-x:auto;padding:4px 4px 0}
+[role=tab]{flex:0 0 auto;font-size:15px;padding:9px 14px;border:1px solid #8793a1;border-bottom:none;border-radius:8px 8px 0 0;background:#e6eaef;color:var(--ink);cursor:pointer;white-space:nowrap}
+[role=tab][aria-selected=true]{background:#fff;border-color:#14213d;box-shadow:inset 0 3px 0 #0072B2;font-weight:700}
+[role=tab]:focus-visible{outline:3px solid #000;outline-offset:-3px;box-shadow:inset 0 0 0 5px #fff}
+[role=tabpanel]:focus-visible{outline:3px solid #000;outline-offset:2px}
+[role=tabpanel][hidden]{display:none}
+.cogrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media(max-width:700px){.cogrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.cogrid h3,#coBig h3{margin:0 0 2px;font-size:15px}
+#coBig svg{max-width:640px}
+#coTable{overflow-x:auto}
+#coTable table{width:auto;min-width:100%}
+#coTable td,#coTable th{white-space:nowrap}
+#coTable tr>:first-child{position:sticky;left:0;background:#fff;z-index:1;border-right:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -83,6 +101,14 @@ ul.how li{margin:3px 0}
     </ul>
   </section>
 
+  <div class="tabbar"><div role="tablist" id="tablist" aria-label="Sections of the fire calendar">
+    <button type="button" role="tab" id="tab-area" aria-controls="panel-area" aria-selected="true" tabindex="0">Area and calendar</button>
+    <button type="button" role="tab" id="tab-compare" aria-controls="panel-compare" aria-selected="false" tabindex="-1">Compare</button>
+    <button type="button" role="tab" id="tab-smoke" aria-controls="panel-smoke" aria-selected="false" tabindex="-1">Smoke</button>
+    <button type="button" role="tab" id="tab-downloads" aria-controls="panel-downloads" aria-selected="false" tabindex="-1">Downloads</button>
+    <button type="button" role="tab" id="tab-method" aria-controls="panel-method" aria-selected="false" tabindex="-1">Method</button>
+  </div></div>
+  <div role="tabpanel" id="panel-area" aria-labelledby="tab-area" tabindex="0">
   <section class="card" aria-labelledby="h-area">
     <h2 id="h-area">1. Choose an area and dates</h2>
     <div class="grid">
@@ -133,7 +159,8 @@ ul.how li{margin:3px 0}
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>0 (grey)</span><span id="rampmid"></span><span id="rampmax"></span></div>
     <p class="hint">Colors use the colorblind-safe viridis ramp on a square-root scale so quiet and extreme months can both be read.</p>
   </section>
-
+  </div>
+  <div role="tabpanel" id="panel-compare" aria-labelledby="tab-compare" tabindex="0" hidden>
   <div class="grid">
     <section class="card" aria-labelledby="h-cmp">
       <h2 id="h-cmp">3. Selected month against other years</h2>
@@ -150,7 +177,24 @@ ul.how li{margin:3px 0}
       <p class="hint" id="annualnote"></p>
     </section>
   </div>
-
+  </div>
+  <div role="tabpanel" id="panel-smoke" aria-labelledby="tab-smoke" tabindex="0" hidden>
+  <p class="hint card" id="coNone" hidden>No carbon monoxide data is loaded, so this tab is empty.</p>
+  <section class="card" id="coCard" aria-labelledby="h-co" hidden>
+    <h2 id="h-co">Smoke context: carbon monoxide from CSA MOPITT</h2>
+    <p class="hint">Carbon monoxide (CO) is a gas released by fires. The blue dots show the monthly average CO in a box around the island of Newfoundland, measured by the MOPITT instrument. The orange bars below show merged fire counts for your selected area, for the same months. CO is shown for context. It does not prove which fire caused which reading.</p>
+    <div class="row"><div><label for="coMeasure">CO measure</label>
+      <select id="coMeasure"><option value="co_total_1e18">Whole air column (10¹⁸ molecules/cm²)</option><option value="co_surface_ppbv">Near the ground (ppbv)</option></select></div>
+      <div><label for="coYear">Open one year in a larger chart</label><select id="coYear"></select></div></div>
+    <div id="coBig"></div>
+    <p class="hint" id="coScale"></p>
+    <div id="coChart" class="cogrid"></div>
+    <p style="margin:6px 0"><button type="button" class="btn alt" id="coMore" aria-expanded="false" hidden>Show all years</button></p>
+    <p class="hint" id="coNote" aria-live="polite"></p>
+    <details><summary>Show the numbers</summary><div id="coTable" tabindex="0" role="region" aria-label="Carbon monoxide and fire counts by month and year (scrolls sideways)"></div></details>
+  </section>
+  </div>
+  <div role="tabpanel" id="panel-downloads" aria-labelledby="tab-downloads" tabindex="0" hidden>
   <section class="card" aria-labelledby="h-dl">
     <h2 id="h-dl">4. Download</h2>
     <p style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 6px">
@@ -165,17 +209,8 @@ ul.how li{margin:3px 0}
     </p>
     <p class="hint" id="dlinfo"></p>
   </section>
-
-  <section class="card" id="coCard" aria-labelledby="h-co" hidden>
-    <h2 id="h-co">Smoke context: carbon monoxide from CSA MOPITT</h2>
-    <p class="hint">Carbon monoxide (CO) is a gas released by fires. The blue dots show the monthly average CO in a box around the island of Newfoundland, measured by the MOPITT instrument. The orange bars below show merged fire counts for your selected area, for the same months. CO is shown for context. It does not prove which fire caused which reading.</p>
-    <div class="row"><div><label for="coMeasure">CO measure</label>
-      <select id="coMeasure"><option value="co_total_1e18">Whole air column (10¹⁸ molecules/cm²)</option><option value="co_surface_ppbv">Near the ground (ppbv)</option></select></div></div>
-    <div id="coChart" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px"></div>
-    <p class="hint" id="coNote" aria-live="polite"></p>
-    <details><summary>Show the numbers</summary><div id="coTable" style="overflow-x:auto"></div></details>
-  </section>
-
+  </div>
+  <div role="tabpanel" id="panel-method" aria-labelledby="tab-method" tabindex="0" hidden>
   <section class="card" aria-labelledby="h-val">
     <h2 id="h-val">How the merge works, and how well</h2>
     <div id="method"></div>
@@ -183,6 +218,7 @@ ul.how li{margin:3px 0}
       <img src="data/validation.png" alt="Left: MODIS against VIIRS May to September fire cell totals for the fit years, with the fitted ratio. Right: raw MODIS, raw VIIRS and the merged series by year.">
     </details>
   </section>
+  </div>
 </main>
 <footer>
   <p>We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management System (FIRMS) (<a href="https://earthdata.nasa.gov/firms">earthdata.nasa.gov/firms</a>), part of NASA's Land, Atmosphere Near real-time Capability for Earth observations (LANCE) (<a href="https://earthdata.nasa.gov/lance">earthdata.nasa.gov/lance</a>) and NASA's Earth Science Data and Information System (ESDIS).</p>
@@ -196,11 +232,12 @@ const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov",
 const VIRIDIS=["#440154","#482878","#3e4989","#31688e","#26828e","#1f9e89","#35b779","#6ece58","#b5de2b","#fde725"];
 const SERIES_START=2000*12+10, AQUA_START=2002*12+6;
 let SUM, RECORDS=[], CSVHEAD="", EXTENT, END_IDX, PARTIAL_IDX, LAST_COMPLETE, COV_DAY, VIIRS_FIRST, N20_FROM, HAS_SNPP;
-const state={bbox:null,startIdx:SERIES_START,endIdx:null,metric:"cells",sel:null,series:[],base:{},drawMode:false};
+const state={coAll:false,coYear:null,tab:"area",bbox:null,startIdx:SERIES_START,endIdx:null,metric:"cells",sel:null,series:[],base:{},drawMode:false};
 const $=id=>document.getElementById(id);
 let cellEls={},cellGrid=[];
 let CO=null;
 const ISLAND={latMin:46.4,latMax:51.9,lonMin:-59.7,lonMax:-52.4};
+const CO_MIN_MONTHS=9,CO_DEFAULT_YEARS=8;
 
 /* ---------- helpers ---------- */
 function hex(h){return [1,3,5].map(i=>parseInt(h.slice(i,i+2),16));}
@@ -258,7 +295,7 @@ async function init(){
   state.bbox={...EXTENT};
   $("eranote").textContent=`Months before ${MONTHS[VIIRS_FIRST%12]} ${Math.floor(VIIRS_FIRST/12)} are MODIS counts scaled to VIIRS level; later months are VIIRS counts as observed. Each month is compared only with years of its own kind.`;
   $("annualnote").textContent=`Orange: MODIS scaled to VIIRS level. Blue: VIIRS observed from ${idxToStr(VIIRS_FIRST)}. Pale bars: before July 2002 (Terra only). The latest months come from near-real-time files, which can be revised.`;
-  bind();writeInputs();setupMap();selectLatest(false);recompute();
+  bind();writeInputs();setupMap();selectLatest(false);recompute();showTab(state.tab);
 }
 
 /* ---------- aggregation ---------- */
@@ -378,8 +415,8 @@ function renderNow(){
     <div class="stats"><div class="stat"><span class="big">${fmt(c.cur.v)}</span><span>${unitName()}${s.maxDay<31?" so far":""}</span></div>
     <div class="stat"><span class="big">${fmt(c.med)}</span><span>usual: the multi-year baseline (median of the same ${s.maxDay<31?"days":"month"} in ${c.n} other ${c.kind} years)</span></div></div>
     <p style="margin:4px 0 8px"><b>${c.msg}</b></p>
-    <button class="btn alt" id="nowDetails">Show details below</button>`;
-  $("nowDetails").onclick=()=>{selectLatest();$("h-cmp").scrollIntoView({behavior:"smooth",block:"start"});};
+    <button class="btn alt" id="nowDetails">Show details (Compare tab)</button>`;
+  $("nowDetails").onclick=()=>{selectLatest(false);markSelected();openCompare();};
 }
 function renderCompare(){
   const el=$("cmp");const s=state.sel;if(!s){el.textContent="Select a month in the calendar.";return;}
@@ -409,50 +446,66 @@ function renderAnnual(){
   $("annual").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="May to September merged totals by year"><text x="0" y="12" font-size="10" fill="#4f5d6b">${fmt(mx)}</text>${s}</svg>`;
 }
 function renderCO(){
-  const card=$("coCard"),all=(CO&&CO.months)?CO.months:[];
-  if(!all.some(r=>r.co_total_1e18!=null||r.co_surface_ppbv!=null)){card.hidden=true;return;}
-  card.hidden=false;
+  const card=$("coCard"),all=(CO&&Array.isArray(CO.months))?CO.months:[];
+  const has=all.some(r=>r.co_total_1e18!=null||r.co_surface_ppbv!=null);
+  card.hidden=!has;$("coNone").hidden=has;if(!has)return;
   const key=$("coMeasure").value,unit=key==="co_surface_ppbv"?"ppbv":"×10¹⁸ molecules/cm²",dec=key==="co_surface_ppbv"?0:2;
   const years=[...new Set(all.map(r=>r.year))].sort((a,b)=>a-b);
   const co={},days={};all.forEach(r=>{co[r.year+"-"+r.month]=r[key];days[r.year+"-"+r.month]=r.days_with_data;});
-  const ymean={};years.forEach(y=>{const v=[];for(let m=1;m<=12;m++){const x=co[y+"-"+m];if(x!=null)v.push(x);}ymean[y]=v.length?v.reduce((a,c)=>a+c,0)/v.length:null;});
-  const dev=(y,v)=>ymean[y]?100*(v/ymean[y]-1):0;
-  let amp=1;years.forEach(y=>{for(let m=1;m<=12;m++){const v=co[y+"-"+m];if(v!=null)amp=Math.max(amp,Math.abs(dev(y,v)));}});
+  const nm={};years.forEach(y=>{nm[y]=0;for(let m=1;m<=12;m++)if(co[y+"-"+m]!=null)nm[y]++;});
+  const drawable=years.filter(y=>nm[y]>=CO_MIN_MONTHS),short=years.filter(y=>nm[y]<CO_MIN_MONTHS);
+  const ymean={};drawable.forEach(y=>{let t=0;for(let m=1;m<=12;m++){const x=co[y+"-"+m];if(x!=null)t+=x;}ymean[y]=t/nm[y];});
+  const dev=(y,v)=>100*(v/ymean[y]-1);
+  let amp=1;drawable.forEach(y=>{for(let m=1;m<=12;m++){const v=co[y+"-"+m];if(v!=null)amp=Math.max(amp,Math.abs(dev(y,v)));}});
   const ax=Math.ceil(amp);
   const fire=(y,m)=>{const r=state.series[y*12+m-1-SERIES_START];return r?r.value:null;};
-  let fmax=1;years.forEach(y=>{for(let m=1;m<=12;m++){const v=fire(y,m);if(v!=null&&v>fmax)fmax=v;}});
-  const W=300,H1=96,H2=62,padL=42,yb=H1+H2+8,H=yb+18,step=(W-padL-4)/12,mid=8+(H1-16)/2;
-  const html=years.map(y=>{
+  let fmax=1;drawable.forEach(y=>{for(let m=1;m<=12;m++){const v=fire(y,m);if(v!=null&&v>fmax)fmax=v;}});
+  const label=y=>`${y}: monthly carbon monoxide around the island as a percent above or below that year's own average (scale −${ax}% to +${ax}%, ${unit}), and merged ${unitName()} for the selected area (scale 0 to ${fmt(fmax)}), by month. The numbers are in the table below.`;
+  const chart=(y,big)=>{
+    const W=big?480:200,H1=big?150:62,H2=big?90:38,padL=big?54:4,padR=big?8:4,fs=14,gapB=big?24:4,yb=H1+H2+8,H=yb+gapB,step=(W-padL-padR)/12,mid=8+(H1-16)/2;
     let path="",dots="",bars="",labs="",gap=true;
     for(let m=1;m<=12;m++){
       const x=padL+(m-0.5)*step,v=co[y+"-"+m];
       if(v!=null){const d=dev(y,v),yy=mid-(H1-16)/2*d/ax;path+=(gap?"M":"L")+x.toFixed(1)+" "+yy.toFixed(1)+" ";gap=false;
-        dots+=`<circle cx="${x.toFixed(1)}" cy="${yy.toFixed(1)}" r="3" fill="#0072B2"><title>${MONTHS[m-1]} ${y}: ${v.toFixed(dec)} ${unit} (${d>=0?"+":""}${d.toFixed(1)}% against this year's average), ${days[y+"-"+m]} days of readings</title></circle>`;}
+        dots+=`<circle cx="${x.toFixed(1)}" cy="${yy.toFixed(1)}" r="${big?4:2.6}" fill="#0072B2"><title>${MONTHS[m-1]} ${y}: ${v.toFixed(dec)} ${unit} (${d>=0?"+":""}${d.toFixed(1)}% against this year's average), ${days[y+"-"+m]} days of readings</title></circle>`;
+        if(big)labs+=`<text x="${x.toFixed(1)}" y="${(d>=0?yy-8:yy+18).toFixed(1)}" font-size="${fs}" text-anchor="middle" fill="#17202a">${Math.round(d)>0?"+":(Math.round(d)<0?"−":"")}${Math.abs(Math.round(d))}</text>`;}
       else gap=true;
       const f=fire(y,m);
       if(f!=null&&f>0){const bh=Math.max((H2-8)*f/fmax,1);bars+=`<rect x="${(x-step*0.35).toFixed(1)}" y="${(yb-bh).toFixed(1)}" width="${(step*0.7).toFixed(1)}" height="${bh.toFixed(1)}" fill="#B34700"><title>${MONTHS[m-1]} ${y}: ${fmt(f)} ${unitName()}</title></rect>`;}
-      labs+=`<text x="${x.toFixed(1)}" y="${yb+13}" font-size="10" text-anchor="middle" fill="#4f5d6b">${MONTHS[m-1][0]}</text>`;
+      if(big)labs+=`<text x="${x.toFixed(1)}" y="${yb+18}" font-size="${fs}" text-anchor="middle" fill="#4f5d6b">${MONTHS[m-1][0]}</text>`;
     }
-    return `<div><h3 style="margin:0 0 2px;font-size:15px">${y}</h3>
-      <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${y}: monthly carbon monoxide around the island as a percent above or below that year's own average, and merged ${unitName()} for the selected area, by month. The numbers are in the table below.">
-      <line x1="${padL}" x2="${W-4}" y1="${mid}" y2="${mid}" stroke="#c5ccd3" stroke-dasharray="3 3"/>
-      <line x1="${padL}" x2="${W-4}" y1="${yb}" y2="${yb}" stroke="#8793a1"/>
-      <text x="${padL-4}" y="14" font-size="10" text-anchor="end" fill="#4f5d6b">+${ax}%</text>
-      <text x="${padL-4}" y="${mid+4}" font-size="10" text-anchor="end" fill="#4f5d6b">avg</text>
-      <text x="${padL-4}" y="${H1}" font-size="10" text-anchor="end" fill="#4f5d6b">−${ax}%</text>
-      <text x="${padL-4}" y="${yb-H2+12}" font-size="10" text-anchor="end" fill="#4f5d6b">${fmt(fmax)}</text>
-      <path d="${path}" fill="none" stroke="#0072B2" stroke-width="1.6"/>${dots}${bars}${labs}</svg></div>`;
-  }).join("");
-  $("coChart").innerHTML=html;
+    const axis=big?`<text x="${padL-6}" y="18" font-size="${fs}" text-anchor="end" fill="#4f5d6b">+${ax}%</text>
+      <text x="${padL-6}" y="${mid+5}" font-size="${fs}" text-anchor="end" fill="#4f5d6b">avg</text>
+      <text x="${padL-6}" y="${H1}" font-size="${fs}" text-anchor="end" fill="#4f5d6b">−${ax}%</text>
+      <text x="${padL-6}" y="${yb-H2+16}" font-size="${fs}" text-anchor="end" fill="#4f5d6b">${fmt(fmax)}</text>`:"";
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${label(y)}">
+      <line x1="${padL}" x2="${W-padR}" y1="${mid}" y2="${mid}" stroke="#8793a1" stroke-dasharray="3 3"/>
+      <line x1="${padL}" x2="${W-padR}" y1="${yb}" y2="${yb}" stroke="#6b7886"/>${axis}
+      <path d="${path}" fill="none" stroke="#0072B2" stroke-width="${big?2:1.6}"/>${dots}${bars}${labs}</svg>`;
+  };
+  // small multiples: the most recent years first, at most CO_DEFAULT_YEARS unless "Show all years" is on
+  const shown=(state.coAll?drawable:drawable.slice(-CO_DEFAULT_YEARS)).slice().reverse();
+  $("coChart").innerHTML=shown.map(y=>`<div><h3>${y}</h3>${chart(y,false)}</div>`).join("");
+  const more=$("coMore");more.hidden=drawable.length<=CO_DEFAULT_YEARS;
+  more.textContent=state.coAll?"Show fewer":`Show all years (${drawable.length})`;more.setAttribute("aria-expanded",state.coAll?"true":"false");
+  // picker and larger chart
+  const sel=$("coYear");if(!drawable.includes(state.coYear))state.coYear=drawable.length?drawable[drawable.length-1]:null;
+  sel.innerHTML=drawable.slice().reverse().map(y=>`<option value="${y}"${y===state.coYear?" selected":""}>${y}</option>`).join("");
+  sel.disabled=!drawable.length;
+  $("coBig").innerHTML=state.coYear?`<h3>${state.coYear}, larger chart (numbers above the dots: percent against that year's average)</h3>${chart(state.coYear,true)}`:"";
+  $("coScale").textContent=drawable.length?`In every chart, blue is CO as a percent above or below that year's own average (scale −${ax}% to +${ax}%; dashed line = the year's average), and orange bars are ${unitName()} for your selected area on one shared scale (0 to ${fmt(fmax)}). Showing ${shown.length} of ${drawable.length} years.`:"";
   const b=state.bbox,near=(a,c)=>Math.abs(a-c)<0.15,matches=near(b.latMin,ISLAND.latMin)&&near(b.latMax,ISLAND.latMax)&&near(b.lonMin,ISLAND.lonMin)&&near(b.lonMax,ISLAND.lonMax);
   const have=all.filter(r=>r[key]!=null),dmin=have.length?Math.min(...have.map(r=>r.days_with_data)):0,dmax=have.length?Math.max(...have.map(r=>r.days_with_data)):0;
   const left=all.filter(r=>r[key]==null).map(r=>`${MONTHS[r.month-1]} ${r.year} (${r.days_with_data} days)`);
+  const vers=[...new Set(all.map(r=>r.version).filter(Boolean))];
+  const verTxt=vers.length>1?`The data product version changes between years (${vers.join(", ")}). `:(vers.length===1?`All years use data product version ${vers[0]}. `:`The data product version can differ between years (for example V18 and V20). `);
   $("coNote").innerHTML=(matches?"":"<b>Your selected area is not the island, so the fire bars and the CO dots cover different ground. Click “Island of Newfoundland” above to match them.</b> ")+
-    `Blue: CO as a percent above or below that year's own average (from −${ax}% to +${ax}%). This hides differences in level between years, which matter because the data product version changes (V18 for 2012, 2013, 2018 and 2019, V20 for 2024). Orange: ${unitName()} on one shared scale (0 to ${fmt(fmax)}). Years shown: ${years.join(", ")}. Each plotted month has ${dmin} to ${dmax} days of readings at about 22 km resolution. `+
+    `Blue: CO as a percent above or below that year's own average (from −${ax}% to +${ax}%). This hides differences in level between years, which matter because ${verTxt.charAt(0).toLowerCase()+verTxt.slice(1)}Orange: ${unitName()} on one shared scale (0 to ${fmt(fmax)}). Years drawn: ${drawable.join(", ")||"none"}. Each plotted month has ${dmin} to ${dmax} days of readings at about 22 km resolution. `+
     (left.length?`Months with fewer than ${CO.min_days||15} days are left out: ${left.join(", ")}. `:"")+
+    (short.length?`A year needs at least ${CO_MIN_MONTHS} of 12 months with values to be drawn, because each month is compared with that year's average. Not drawn: ${short.map(y=>`${y}: only ${nm[y]} month${nm[y]===1?"":"s"}`).join(", ")}. `:"")+
     `CO also follows the seasons and carries smoke from fires in other provinces, and the box includes nearby sea and small parts of the Gulf, southern Labrador and Quebec. A high month is not proof of a local fire.`;
-  const mrow=m=>`<tr><td>${MONTHS[m-1]}</td>`+years.map(y=>{const v=co[y+"-"+m],f=fire(y,m);return `<td>${v==null?"–":v.toFixed(dec)}</td><td>${f==null?"–":fmt(f)}</td>`;}).join("")+"</tr>";
-  $("coTable").innerHTML=`<table><tr><th rowspan="2">Month</th>${years.map(y=>`<th colspan="2">${y}</th>`).join("")}</tr><tr>${years.map(()=>`<th>CO (${unit})</th><th>${unitName()[0].toUpperCase()+unitName().slice(1)}</th>`).join("")}</tr>${[1,2,3,4,5,6,7,8,9,10,11,12].map(mrow).join("")}</table>`;
+  const mrow=m=>`<tr><th scope="row">${MONTHS[m-1]}</th>`+years.map(y=>{const v=co[y+"-"+m],f=fire(y,m);return `<td>${v==null?"–":v.toFixed(dec)}</td><td>${f==null?"–":fmt(f)}</td>`;}).join("")+"</tr>";
+  $("coTable").innerHTML=`<table><tr><th rowspan="2" scope="col">Month</th>${years.map(y=>`<th colspan="2" scope="colgroup">${y}</th>`).join("")}</tr><tr>${years.map(()=>`<th>CO (${unit})</th><th>${unitName()[0].toUpperCase()+unitName().slice(1)}</th>`).join("")}</tr>${[1,2,3,4,5,6,7,8,9,10,11,12].map(mrow).join("")}</table>`;
 }
 function localRatio(){
   const sets=aggregate(r=>inBox(r,state.bbox));let v=0,mo=0;
@@ -546,6 +599,9 @@ function applyRange(){
   if(!re.test(sv)||!re.test(ev)){setMsg("Dates must look like 2018-04 (year, dash, two-digit month).");$("start").value=idxToStr(state.startIdx);$("end").value=idxToStr(state.endIdx);return;}
   let a=Math.max(strToIdx(sv),SERIES_START),b=Math.min(strToIdx(ev),END_IDX);
   if(a>b)[a,b]=[b,a];
+  // the change event can fire twice (on Enter and again on blur); only rebuild when the range really changed,
+  // otherwise a click on the calendar right after typing a date is lost while the grid is rebuilt
+  if(a===state.startIdx&&b===state.endIdx){setMsg("");$("start").value=idxToStr(a);$("end").value=idxToStr(b);return;}
   setMsg("");state.startIdx=a;state.endIdx=b;$("start").value=idxToStr(a);$("end").value=idxToStr(b);renderAll();
 }
 function downloadBlob(name,blob){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
@@ -599,6 +655,47 @@ function downloadCalendarPNG(){
   g.fillText("Heat detections are not confirmed fires. Numbers for small areas are indicative. See the method notes in the app.",16,H-18);
   cvs.toBlob(bl=>downloadBlob(`nl_fire_calendar_${idxToStr(state.startIdx)}_${idxToStr(state.endIdx)}.png`,bl),"image/png");
 }
+/* ---------- tabs ---------- */
+const TABS=["area","compare","smoke","downloads","method"];
+function tabFromHash(){const h=(location.hash||"").replace("#","");return TABS.includes(h)?h:"area";}
+function showTab(id){
+  if(!TABS.includes(id))id="area";
+  state.tab=id;
+  for(const t of TABS){const on=t===id,tab=$("tab-"+t);
+    tab.setAttribute("aria-selected",on?"true":"false");tab.tabIndex=on?0:-1;$("panel-"+t).hidden=!on;}
+  // a hidden panel has no width, so redraw what lives in the panel that just opened
+  if(!SUM)return;
+  if(id==="area"){renderHeat();drawMap();}
+  else if(id==="compare"){renderCompare();renderAnnual();}
+  else if(id==="smoke")renderCO();
+  else if(id==="method")renderMethod();
+}
+/* open a tab and record it in the address, so links and the Back button work */
+function openTab(id){
+  if(tabFromHash()!==id||!location.hash)history.pushState(null,"","#"+id);   // pushState does not jump the page
+  showTab(id);
+}
+function openCompare(){openTab("compare");$("panel-compare").scrollIntoView({block:"start"});}
+function bindTabs(){
+  const list=$("tablist");
+  for(const t of TABS)$("tab-"+t).addEventListener("click",()=>openTab(t));
+  list.addEventListener("keydown",e=>{
+    const cur=TABS.indexOf(e.target.id.replace("tab-",""));if(cur<0)return;
+    let next=null;
+    if(e.key==="ArrowRight")next=(cur+1)%TABS.length;
+    else if(e.key==="ArrowLeft")next=(cur-1+TABS.length)%TABS.length;
+    else if(e.key==="Home")next=0;
+    else if(e.key==="End")next=TABS.length-1;
+    if(next===null)return;
+    e.preventDefault();
+    for(const t of TABS)$("tab-"+t).tabIndex=-1;
+    const b=$("tab-"+TABS[next]);b.tabIndex=0;b.focus();
+  });
+  // when focus leaves the tab list, the open tab is the one tab stop again
+  list.addEventListener("focusout",e=>{if(!list.contains(e.relatedTarget))for(const t of TABS)$("tab-"+t).tabIndex=t===state.tab?0:-1;});
+  const follow=()=>{const t=tabFromHash();if(t!==state.tab)showTab(t);};
+  window.addEventListener("popstate",follow);window.addEventListener("hashchange",follow);
+}
 function bind(){
   $("apply").onclick=()=>{
     const f=["latMax","latMin","lonMin","lonMax"],raw=f.map(id=>$(id).value.trim());
@@ -618,9 +715,11 @@ function bind(){
   $("dlPng").onclick=downloadCalendarPNG;
   $("dlAnnualSvg").onclick=()=>downloadSVG("#annual svg","nl_fire_yearly_totals.svg");
   $("dlMonthSvg").onclick=()=>downloadSVG("#cmp svg","nl_fire_month_comparison.svg");
-  $("selLatest").onclick=()=>selectLatest();
-  $("selComplete").onclick=()=>selectCell(Math.floor(LAST_COMPLETE/12),LAST_COMPLETE%12+1,31);
-  $("selPeak").onclick=()=>{const r=rowsInRange().filter(x=>!x.partial).sort((a,b)=>b.value-a.value)[0];if(r)selectCell(r.y,r.m,31);};
+  $("selLatest").onclick=()=>{selectLatest(false);markSelected();openCompare();};
+  $("selComplete").onclick=()=>{state.sel={y:Math.floor(LAST_COMPLETE/12),m:LAST_COMPLETE%12+1,maxDay:31};markSelected();openCompare();};
+  $("selPeak").onclick=()=>{const r=rowsInRange().filter(x=>!x.partial).sort((a,b)=>b.value-a.value)[0];if(r){state.sel={y:r.y,m:r.m,maxDay:31};markSelected();}openCompare();};
+  $("coMore").onclick=()=>{state.coAll=!state.coAll;renderCO();};
+  $("coYear").onchange=$("coYear").oninput=()=>{const v=+$("coYear").value;if(v!==state.coYear){state.coYear=v;renderCO();}};
   $("heat").addEventListener("keydown",e=>{
     const t=e.target;if(!t.classList||!t.classList.contains("cell"))return;
     const dr={ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1]}[e.key];if(!dr)return;
@@ -636,7 +735,7 @@ function bind(){
     const rows=rowsInRange().map(r=>[idxToStr(r.idx),b.latMin.toFixed(2),b.latMax.toFixed(2),b.lonMin.toFixed(2),b.lonMax.toFixed(2),u,r.modis,HAS_SNPP?r.snpp:"",r.n20,r.value.toFixed(2),r.src,r.era,r.terra,r.partial,r.median.toFixed(2),r.nb,r.anom.toFixed(2),r.nb?r.below.toFixed(1):""].join(","));
     download(`nl_fire_monthly_${idxToStr(state.startIdx)}_${idxToStr(state.endIdx)}.csv`,[head,...rows].join("\n")+"\n");};
 }
-init();
+bindTabs();showTab(tabFromHash());init();
 </script>
 </body>
 </html>
