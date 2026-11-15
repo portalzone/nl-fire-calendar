@@ -88,6 +88,31 @@ def test_page_has_title_language_and_nasa_acknowledgment(page):
     assert "NASA's Fire Information for Resource Management System" in page.inner_text("footer")
 
 
+def test_challenge_brief_uses_data_backed_evidence(page):
+    summary = json.loads((APP / "data" / "summary.json").read_text())
+    first = min(source["first_date"] for source in summary["sources"].values())
+    end = summary["coverage_end"]
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    expected_period = f"{months[int(first[5:7]) - 1]} {first[:4]}–{months[int(end[5:7]) - 1]} {end[:4]}"
+    assert page.inner_text("#proofPeriod") == expected_period
+    assert page.inner_text("#proofSeasons") == str(len(summary["series_rules"]["fit_years"]))
+    assert page.inner_text("#proofError") == f"{round(summary['ratios']['cells']['cv_median_pct_err'])}%"
+    text = page.inner_text("#challengeBrief")
+    for phrase in ("MODIS", "VIIRS", "emergency responders", "historical context", "does not forecast"):
+        assert phrase in text
+
+
+def test_challenge_brief_links_and_tour_buttons_work(page):
+    links = page.locator("header .hero-links a")
+    assert links.count() == 2
+    assert "/2026/challenges/modis-and-viirs-hot-spots/" in links.nth(0).get_attribute("href")
+    assert "/2026/local-events/st-johns/" in links.nth(1).get_attribute("href")
+    page.click("#briefMethod")
+    assert page.is_visible("#panel-method") and page.evaluate("location.hash") == "#method"
+    page.click("#briefExplore")
+    assert page.is_visible("#panel-area") and page.evaluate("location.hash") == "#area"
+
+
 def test_zero_months_never_show_a_dot(page):
     zero_with_dot = page.locator(".cell.zero .flag").count()
     assert zero_with_dot == 0
