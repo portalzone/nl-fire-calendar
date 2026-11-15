@@ -5,7 +5,7 @@ Two versions:
 - A. The official Space Apps video. At most 30 seconds, with English subtitles (`notes/subtitles.srt`).
 - B. The live 2-minute presentation.
 
-Fill in `[YOUR NAME]` and `[TEAM NAME]` before recording.
+Fill in `[YOUR NAME]` and `[TEAM NAME]` in the 2-minute version before presenting.
 
 What the app does and does not do. It gives historical context: when and where satellites saw fire in the past. It does not predict fires, send alerts or confirm fires. A heat detection is not a confirmed fire.
 
@@ -25,20 +25,20 @@ What the app does and does not do. It gives historical context: when and where s
 
 ---
 
-## A. Official video: 30 seconds, 73 spoken words
+## A. Official video: 30 seconds, 70 spoken words
 
 | Time | On screen | Click | Words to say | Words |
 |---|---|---|---|---|
-| 0:00 to 0:03 | Top of the page: the title "Newfoundland and Labrador Fire Calendar" | None | I'm [YOUR NAME], from team [TEAM NAME]. | 5 |
-| 0:03 to 0:10 | Scroll a little to the challenge card: "Two sensors count fire hotspots differently" and the boxes "14" and "15%" | None (scroll) | The challenge: Harmonization of MODIS and VIIRS Hot Spots. MODIS is retiring; ten years of history could be lost. | 19 |
-| 0:10 to 0:14 | The calendar, one square per month, years 2001 to 2026 | "Explore the calendar", then scroll down to the calendar | NL Fire Calendar: twenty-five years of fire history on one scale. | 11 |
-| 0:14 to 0:21 | The calendar. Point at a 2009 row (MODIS, scaled) and a 2022 row (VIIRS). | None | We count fire cells and fit one ratio on fourteen overlap seasons to put MODIS on the VIIRS scale. | 19 |
-| 0:21 to 0:24 | Smoke tab: carbon monoxide chart | "Smoke" tab | Data: NASA FIRMS and CSA MOPITT. | 6 |
-| 0:24 to 0:30 | Compare tab: August 2025, 64 fire cells against a median of 2 | "Compare" tab, then "Peak month in range" | Pick an area and month for historical context, not alerts. Next: every province. | 13 |
+| 0:00.0 to 0:03.5 | Top of the page: the title "Newfoundland and Labrador Fire Calendar" | None | I'm Amalraj Rajesh, from Basepan Space Challenge Team. | 8 |
+| 0:03.5 to 0:12.0 | Scroll a little to the challenge card: "Two sensors count fire hotspots differently" and the boxes "14" and "15%" | None (scroll) | Challenge: Harmonization of MODIS and VIIRS Hot Spots. MODIS is retiring; more than a decade of fire history could be lost. | 21 |
+| 0:12.0 to 0:16.5 | The calendar, one square per month, years 2001 to 2026 | "Explore the calendar", then scroll down to the calendar | NL Fire Calendar: twenty-five years of fire history on one scale. | 11 |
+| 0:16.5 to 0:22.0 | The calendar. Point at a 2009 row (MODIS, scaled) and a 2022 row (VIIRS). | None | Fire cells and one ratio from fourteen overlap seasons scale MODIS to VIIRS. | 13 |
+| 0:22.0 to 0:24.5 | Smoke tab: carbon monoxide chart | "Smoke" tab | Data: NASA FIRMS and CSA MOPITT. | 6 |
+| 0:24.5 to 0:30.0 | Compare tab: August 2025, 64 fire cells against a median of 2 | "Compare" tab, then "Peak month in range" | Pick an area and month for historical context. Next: every province. | 11 |
 
-Total: 73 words in 30 seconds (the two names are counted as one word each). Leave about half a second of silence at the end.
+Total: 70 words in 30 seconds. Leave about half a second of silence at the end.
 
-Note on "ten years": MODIS-only years in this record run from 2001 to early 2012, which is about 11 years. The challenge brief says "almost 10 years", so "ten years" matches the brief.
+The app's data has about 11 years with MODIS alone (late 2000 to early 2012).
 
 ---
 
@@ -49,7 +49,7 @@ Speak at a calm pace. The times are a guide.
 **0:00 to 0:15. Who we are and the problem.**
 Screen: top of the page.
 Click: none.
-Say: "Hi, I'm [YOUR NAME], from team [TEAM NAME]. Our challenge is Harmonization of MODIS and VIIRS Hot Spots. Satellites have tracked fire for over twenty years. But the record is split between two sensors, and MODIS is being retired. If we cannot compare the two, about ten years of fire history is lost."
+Say: "Hi, I'm [YOUR NAME], from team [TEAM NAME]. Our challenge is Harmonization of MODIS and VIIRS Hot Spots. Satellites have tracked fire for over twenty years. But the record is split between two sensors, and MODIS is being retired. If we cannot compare the two, more than a decade of fire history is lost."
 
 **0:15 to 0:35. The idea.**
 Screen: the challenge card with the boxes "14 overlap seasons" and "15% median error".
