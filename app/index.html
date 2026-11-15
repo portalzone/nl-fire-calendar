@@ -75,7 +75,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .hint{font-size:13px;color:var(--muted)}
 #msg{min-height:20px;color:#9c2a00;font-weight:600;font-size:14px;margin:4px 0}
 #mapwrap canvas{width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfcfd;cursor:crosshair;touch-action:pan-y}
-#mapwrap canvas.draw{touch-action:none}
+#mapwrap canvas{touch-action:none}
+#mapwrap canvas:focus-visible{outline:3px solid #000;outline-offset:2px}
+.mapctl{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 0}
+.mapctl .btn{min-width:44px}
+.btn[disabled]{opacity:.55;cursor:default}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin:6px 0}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 #heatwrap{overflow-x:auto}
@@ -225,14 +229,21 @@ ul.how li{margin:3px 0}
           <button class="btn" id="apply">Apply area</button>
           <button class="btn alt" id="reset">Reset to all of NL</button>
           <button class="btn alt" id="island">Island of Newfoundland</button>
-          <button class="btn alt" id="drawmode" aria-pressed="false">Draw area on map by touch: off</button>
+          <button class="btn alt" id="drawmode" aria-pressed="false">Draw area on map: off</button>
         </p>
         <div id="msg" role="alert"></div>
         <p class="hint" id="areasummary" aria-live="polite"></p>
-        <p class="hint">With a mouse, drag a rectangle on the map. On a touch screen, turn on "Draw area on map by touch" first. <b>Fire cells</b> counts each 0.1&deg; map cell with a detection on a given day once, so the finer VIIRS pixels do not inflate the count. Raw hotspots count every detection.</p>
+        <p class="hint">To draw an area on the map, hold Shift and drag, or turn on "Draw area on map" and drag (this also works by touch). <b>Fire cells</b> counts each 0.1&deg; map cell with a detection on a given day once, so the finer VIIRS pixels do not inflate the count. Raw hotspots count every detection.</p>
       </div>
       <div id="mapwrap">
-        <canvas id="map" role="img" aria-label="Map of hotspot detections. Use the latitude and longitude boxes to choose an area without the map."></canvas>
+        <canvas id="map" tabindex="0" role="img" aria-describedby="mapZoom" aria-label="Map of hotspot detections. When the map has focus, the arrow keys move it and the plus and minus keys zoom. Use the latitude and longitude boxes to choose an area without the map."></canvas>
+        <div class="mapctl" role="group" aria-label="Map zoom">
+          <button type="button" class="btn alt" id="mapIn" aria-label="Zoom in">+</button>
+          <button type="button" class="btn alt" id="mapOut" aria-label="Zoom out">−</button>
+          <button type="button" class="btn alt" id="mapArea">Zoom to selected area</button>
+          <button type="button" class="btn alt" id="mapReset">Reset map</button>
+        </div>
+        <p class="hint" id="mapZoom" aria-live="polite"></p>
         <div class="legend">
           <span><span class="dot" style="background:#B45F06"></span>MODIS</span>
           <span id="lgSnpp"><span class="dot" style="background:#009E73"></span>VIIRS Suomi NPP</span>
@@ -651,49 +662,139 @@ function updateSummary(){
 }
 
 /* ---------- map ---------- */
-let cv,ctx,proj;
+/* The map can zoom and pan. state.view holds the centre (lat, lon) and the zoom factor z
+   (1 = the whole data area fits). The selected area, dates and counts never depend on it. */
+let cv,ctx,proj,mapRaf=0;
+const MAP_MIN_KM=10;                       // the closest view is about 10 km across
+function viewDefault(){return {lat:(EXTENT.latMin+EXTENT.latMax)/2,lon:(EXTENT.lonMin+EXTENT.lonMax)/2,z:1};}
+function maxZoom(){
+  if(!proj)return 100;
+  const kmAcross=Math.min(cv.width,cv.height)/proj.s0*111;   // km across at z=1 (degrees of latitude × 111)
+  return Math.max(1,kmAcross/MAP_MIN_KM);
+}
+function clampView(v){
+  v.z=Math.min(Math.max(v.z,1),maxZoom());
+  // the centre stays inside the data area, so the data never leaves the map completely
+  v.lat=Math.min(Math.max(v.lat,EXTENT.latMin),EXTENT.latMax);
+  v.lon=Math.min(Math.max(v.lon,EXTENT.lonMin),EXTENT.lonMax);
+  if(v.z===1){const d=viewDefault();v.lat=d.lat;v.lon=d.lon;}
+  return v;
+}
+function requestMap(){if(mapRaf)return;mapRaf=requestAnimationFrame(()=>{mapRaf=0;drawMap();});}
+/* zoom by factor f, keeping the map point under (x, y) (canvas pixels) in place */
+function zoomAt(f,x,y){
+  if(!proj)layout();
+  const v=state.view,before=unproj(x,y);
+  v.z*=f;clampView(v);layout();
+  const after=unproj(x,y);
+  v.lat+=before.lat-after.lat;v.lon+=before.lon-after.lon;clampView(v);
+  drawMap();
+}
+function zoomCentre(f){layout();zoomAt(f,cv.width/2,cv.height/2);}
+function panBy(dx,dy){   // canvas pixels
+  const v=state.view;v.lon-=dx/(proj.kx*proj.s);v.lat+=dy/proj.s;clampView(v);requestMap();
+}
+function hasArea(){const b=state.bbox,e=EXTENT,n=(a,c)=>Math.abs(a-c)<1e-9;return !(n(b.latMin,e.latMin)&&n(b.latMax,e.latMax)&&n(b.lonMin,e.lonMin)&&n(b.lonMax,e.lonMax));}
+function zoomToArea(){
+  if(!hasArea())return;
+  layout();
+  const b=state.bbox,v=state.view;
+  const wDeg=(b.lonMax-b.lonMin)*proj.kx,hDeg=b.latMax-b.latMin;
+  v.lat=(b.latMin+b.latMax)/2;v.lon=(b.lonMin+b.lonMax)/2;
+  v.z=0.9*Math.min(cv.width/(wDeg*proj.s0),cv.height/(hDeg*proj.s0));
+  clampView(v);drawMap();
+}
+function resetMap(){state.view=viewDefault();drawMap();}
 function setupMap(){
   cv=$("map");ctx=cv.getContext("2d");
-  let drag=null;
+  state.view=viewDefault();
+  let drag=null,pan=null;const touches=new Map();let pinch=null;
   const pos=e=>{const r=cv.getBoundingClientRect();return {x:(e.clientX-r.left)*(cv.width/r.width),y:(e.clientY-r.top)*(cv.height/r.height)};};
-  cv.addEventListener("pointerdown",e=>{if(e.pointerType==="touch"&&!state.drawMode)return;cv.setPointerCapture(e.pointerId);drag={a:pos(e),b:pos(e)};});
-  cv.addEventListener("pointermove",e=>{if(!drag)return;drag.b=pos(e);drawMap(drag);});
-  cv.addEventListener("pointerup",e=>{if(!drag)return;drag.b=pos(e);const a=drag.a,b=drag.b;drag=null;
+  cv.addEventListener("pointerdown",e=>{
+    cv.setPointerCapture(e.pointerId);
+    if(e.pointerType==="touch"){
+      touches.set(e.pointerId,pos(e));
+      if(touches.size===2){drag=null;pan=null;const [a,b]=[...touches.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y)};return;}
+    }
+    if(state.drawMode||e.shiftKey){drag={a:pos(e),b:pos(e)};}
+    else pan={p:pos(e)};
+  });
+  cv.addEventListener("pointermove",e=>{
+    if(e.pointerType==="touch"&&touches.has(e.pointerId)){
+      touches.set(e.pointerId,pos(e));
+      if(pinch&&touches.size===2){const [a,b]=[...touches.values()],d=Math.hypot(a.x-b.x,a.y-b.y);
+        if(pinch.d>0)zoomAt(d/pinch.d,(a.x+b.x)/2,(a.y+b.y)/2);pinch.d=d;return;}
+    }
+    if(drag){drag.b=pos(e);drawMap(drag);return;}
+    if(pan){const q=pos(e);panBy(q.x-pan.p.x,q.y-pan.p.y);pan.p=q;}
+  });
+  const end=e=>{
+    touches.delete(e.pointerId);if(touches.size<2)pinch=null;
+    if(pan){pan=null;return;}
+    if(!drag)return;drag.b=pos(e);const a=drag.a,b=drag.b;drag=null;
     if(Math.abs(a.x-b.x)<6||Math.abs(a.y-b.y)<6){drawMap();return;}
     const p1=unproj(Math.min(a.x,b.x),Math.max(a.y,b.y)),p2=unproj(Math.max(a.x,b.x),Math.min(a.y,b.y));
-    state.bbox={latMin:p1.lat,lonMin:p1.lon,latMax:p2.lat,lonMax:p2.lon};setMsg("");writeInputs();recompute();});
-  cv.addEventListener("pointercancel",()=>{drag=null;drawMap();});
+    state.bbox={latMin:p1.lat,lonMin:p1.lon,latMax:p2.lat,lonMax:p2.lon};setMsg("");writeInputs();recompute();};
+  cv.addEventListener("pointerup",end);
+  cv.addEventListener("pointercancel",e=>{touches.delete(e.pointerId);pinch=null;pan=null;drag=null;drawMap();});
+  // mouse wheel and trackpad pinch (a trackpad pinch arrives as a wheel event with ctrlKey)
+  cv.addEventListener("wheel",e=>{e.preventDefault();const q=pos(e),f=Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.002));zoomAt(f,q.x,q.y);},{passive:false});
+  cv.addEventListener("keydown",e=>{
+    const step=40*(window.devicePixelRatio||1);
+    const k={ArrowLeft:[step,0],ArrowRight:[-step,0],ArrowUp:[0,step],ArrowDown:[0,-step]}[e.key];
+    if(k){e.preventDefault();panBy(k[0],k[1]);return;}
+    if(e.key==="+"||e.key==="="){e.preventDefault();zoomCentre(1.5);}
+    else if(e.key==="-"||e.key==="_"){e.preventDefault();zoomCentre(1/1.5);}
+  });
+  $("mapIn").onclick=()=>zoomCentre(1.5);
+  $("mapOut").onclick=()=>zoomCentre(1/1.5);
+  $("mapArea").onclick=zoomToArea;
+  $("mapReset").onclick=resetMap;
   window.addEventListener("resize",()=>drawMap());
 }
 function layout(){
   const w=cv.clientWidth||600,dpr=window.devicePixelRatio||1;
   const midLat=(EXTENT.latMin+EXTENT.latMax)/2,kx=Math.cos(midLat*Math.PI/180);
   const spanX=(EXTENT.lonMax-EXTENT.lonMin)*kx,spanY=EXTENT.latMax-EXTENT.latMin;
-  const h=Math.min(Math.round(w*spanY/spanX),window.innerWidth>900?460:720);cv.width=w*dpr;cv.height=h*dpr;cv.style.height=h+"px";
-  const s=Math.min(cv.width/spanX,cv.height/spanY);
-  proj={kx,s,ox:(cv.width-spanX*s)/2,oy:(cv.height-spanY*s)/2};
+  const h=Math.min(Math.round(w*spanY/spanX),window.innerWidth>900?460:720);
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);cv.style.height=h+"px";}
+  const s0=Math.min(cv.width/spanX,cv.height/spanY),v=state.view||viewDefault();
+  proj={kx,s0,s:s0*v.z,lat:v.lat,lon:v.lon,cx:cv.width/2,cy:cv.height/2};
 }
-function toXY(lat,lon){return {x:proj.ox+(lon-EXTENT.lonMin)*proj.kx*proj.s,y:proj.oy+(EXTENT.latMax-lat)*proj.s};}
-function unproj(x,y){return {lat:EXTENT.latMax-(y-proj.oy)/proj.s,lon:EXTENT.lonMin+(x-proj.ox)/(proj.kx*proj.s)};}
+function toXY(lat,lon){return {x:proj.cx+(lon-proj.lon)*proj.kx*proj.s,y:proj.cy+(proj.lat-lat)*proj.s};}
+function unproj(x,y){return {lat:proj.lat-(y-proj.cy)/proj.s,lon:proj.lon+(x-proj.cx)/(proj.kx*proj.s)};}
+function niceStep(span){for(const s of [10,5,2,1,0.5,0.2,0.1,0.05,0.02,0.01,0.005])if(span/s>=4)return s;return 0.002;}
+function degLabel(v,step,hemi){const dec=step>=1?0:Math.min(3,Math.ceil(-Math.log10(step)));return Math.abs(v).toFixed(dec)+"°"+hemi;}
+function mapBounds(){const a=unproj(0,0),b=unproj(cv.width,cv.height);return {latMax:a.lat,lonMin:a.lon,latMin:b.lat,lonMax:b.lon};}
 function drawMap(drag){
   if(!cv||!RECORDS.length)return;layout();
-  const dpr=window.devicePixelRatio||1;
+  const dpr=window.devicePixelRatio||1,vb=mapBounds();
   ctx.clearRect(0,0,cv.width,cv.height);
   ctx.strokeStyle="#e3e8ee";ctx.fillStyle="#5d6b7a";ctx.font=`${11*dpr}px system-ui`;ctx.lineWidth=1;
-  for(let la=Math.ceil(EXTENT.latMin/2)*2;la<=EXTENT.latMax;la+=2){const p=toXY(la,EXTENT.lonMin);ctx.beginPath();ctx.moveTo(0,p.y);ctx.lineTo(cv.width,p.y);ctx.stroke();ctx.fillText(la+"°N",4,p.y-3);}
-  for(let lo=Math.ceil(EXTENT.lonMin/4)*4;lo<=EXTENT.lonMax;lo+=4){const p=toXY(EXTENT.latMin,lo);ctx.beginPath();ctx.moveTo(p.x,0);ctx.lineTo(p.x,cv.height);ctx.stroke();ctx.fillText(Math.abs(lo)+"°W",p.x+3,cv.height-4);}
-  const col={modis:"#B45F06",snpp:"#009E73",n20:"#0072B2",n21:"#777777"},d=dpr*2;
+  const sy=niceStep(vb.latMax-vb.latMin),sx=niceStep(vb.lonMax-vb.lonMin);
+  const labels=[];
+  for(let la=Math.ceil(vb.latMin/sy)*sy;la<=vb.latMax;la+=sy){const p=toXY(la,vb.lonMin);ctx.beginPath();ctx.moveTo(0,p.y);ctx.lineTo(cv.width,p.y);ctx.stroke();const t=degLabel(la,sy,"N");ctx.fillText(t,4,p.y-3);labels.push(t);}
+  for(let lo=Math.ceil(vb.lonMin/sx)*sx;lo<=vb.lonMax;lo+=sx){const p=toXY(vb.latMin,lo);ctx.beginPath();ctx.moveTo(p.x,0);ctx.lineTo(p.x,cv.height);ctx.stroke();const t=degLabel(lo,sx,"W");ctx.fillText(t,p.x+3,cv.height-4);labels.push(t);}
+  cv.dataset.labels=labels.join(" ");
+  const col={modis:"#B45F06",snpp:"#009E73",n20:"#0072B2",n21:"#777777"};
+  const d=dpr*Math.min(2+Math.log2(state.view.z),7),W=cv.width,H=cv.height;
   for(const pass of [false,true]){
     ctx.globalAlpha=pass?0.8:0.12;
     for(const r of RECORDS){
       if(r.idx<state.startIdx||r.idx>state.endIdx||inBox(r,state.bbox)!==pass)continue;
-      const p=toXY(r.lat,r.lon);ctx.fillStyle=col[r.src]||"#777";ctx.fillRect(p.x-d/2,p.y-d/2,d,d);
+      const p=toXY(r.lat,r.lon);if(p.x<-d||p.y<-d||p.x>W+d||p.y>H+d)continue;
+      ctx.fillStyle=col[r.src]||"#777";ctx.fillRect(p.x-d/2,p.y-d/2,d,d);
     }
   }
   ctx.globalAlpha=1;
   const b=drag?{x:Math.min(drag.a.x,drag.b.x),y:Math.min(drag.a.y,drag.b.y),w:Math.abs(drag.a.x-drag.b.x),h:Math.abs(drag.a.y-drag.b.y)}:
     (()=>{const a=toXY(state.bbox.latMax,state.bbox.lonMin),c=toXY(state.bbox.latMin,state.bbox.lonMax);return {x:a.x,y:a.y,w:c.x-a.x,h:c.y-a.y};})();
   ctx.strokeStyle="#d55e00";ctx.lineWidth=2*dpr;ctx.setLineDash([8,5]);ctx.strokeRect(b.x,b.y,b.w,b.h);ctx.setLineDash([]);
+  // controls and status line
+  const z=state.view.z,mz=maxZoom();
+  $("mapIn").disabled=z>=mz-1e-6;$("mapOut").disabled=z<=1+1e-6;$("mapReset").disabled=z<=1+1e-6;$("mapArea").disabled=!hasArea();
+  const km=Math.round(Math.min(cv.width,cv.height)/proj.s*111);
+  $("mapZoom").textContent=`Zoom ${z<10?z.toFixed(1):Math.round(z)}× (${z<=1+1e-6?"full view":`about ${km} km across`}). Scroll or pinch to zoom, drag to move. Shift+drag, or turn on "Draw area on map", to draw an area.`;
 }
 
 /* ---------- inputs, downloads, keyboard ---------- */
@@ -822,7 +923,7 @@ function bind(){
   $("island").onclick=()=>{setMsg("");state.bbox={...ISLAND};writeInputs();recompute();};
   $("coMeasure").onchange=renderCO;
   $("reset").onclick=()=>{setMsg("");state.bbox={...EXTENT};writeInputs();recompute();};
-  $("drawmode").onclick=()=>{state.drawMode=!state.drawMode;$("drawmode").setAttribute("aria-pressed",state.drawMode);$("drawmode").textContent="Draw area on map by touch: "+(state.drawMode?"on":"off");$("map").classList.toggle("draw",state.drawMode);};
+  $("drawmode").onclick=()=>{state.drawMode=!state.drawMode;$("drawmode").setAttribute("aria-pressed",state.drawMode);$("drawmode").textContent="Draw area on map: "+(state.drawMode?"on":"off");$("map").classList.toggle("draw",state.drawMode);};
   $("start").onchange=applyRange;$("end").onchange=applyRange;
   $("metric").onchange=()=>{state.metric=$("metric").value;recompute();};
   $("dlPng").onclick=downloadCalendarPNG;

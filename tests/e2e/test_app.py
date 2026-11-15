@@ -1138,3 +1138,267 @@ def test_co_note_with_one_version_everywhere_names_no_change(browser, base):
     note = pg.inner_text("#coNote")
     assert "V20.2.3" in note and "version changed during" not in note
     ctx.close()
+
+
+# ---------------------------------------------------------------- map zoom and pan
+def map_state(pg):
+    return pg.evaluate("""() => { const b = mapBounds(); return {z: state.view.z, lat: state.view.lat, lon: state.view.lon,
+        latMin: b.latMin, latMax: b.latMax, lonMin: b.lonMin, lonMax: b.lonMax,
+        labels: document.getElementById('map').dataset.labels, text: document.getElementById('mapZoom').textContent}; }""")
+
+
+def counts_and_area(pg):
+    return pg.evaluate("JSON.stringify([state.bbox, state.startIdx, state.endIdx, state.series.map(r => r.value)])")
+
+
+def map_page(browser, base, width=1400, height=900, touch=False):
+    ctx = browser.new_context(viewport={"width": width, "height": height}, has_touch=touch, is_mobile=touch)
+    pg = ctx.new_page()
+    pg.errors = []
+    pg.on("pageerror", lambda e: pg.errors.append(str(e)))
+    pg.on("console", lambda m: pg.errors.append(m.text) if m.type == "error" else None)
+    pg.goto(base)
+    pg.wait_for_selector(".cell")
+    pg.locator("#map").scroll_into_view_if_needed()
+    return ctx, pg
+
+
+def test_map_starts_at_the_full_view_with_a_status_line(page):
+    s = map_state(page)
+    assert s["z"] == 1 and "full view" in s["text"] and "Scroll or pinch to zoom, drag to move." in s["text"]
+    assert page.is_disabled("#mapOut") and page.is_disabled("#mapReset") and not page.is_disabled("#mapIn")
+
+
+@pytest.mark.parametrize("button", ["#mapIn", "#mapOut"])
+def test_zoom_buttons_change_the_extent_and_the_labels(page, button):
+    full = map_state(page)
+    page.click("#mapIn")
+    page.click("#mapIn")
+    zoomed = map_state(page)
+    assert zoomed["z"] > 1 and (zoomed["latMax"] - zoomed["latMin"]) < (full["latMax"] - full["latMin"])
+    assert zoomed["labels"] != full["labels"] and "Zoom 2.3×" in zoomed["text"]
+    if button == "#mapOut":
+        page.click("#mapOut")
+        out = map_state(page)
+        assert 1 < out["z"] < zoomed["z"] and (out["latMax"] - out["latMin"]) > (zoomed["latMax"] - zoomed["latMin"])
+
+
+def test_reset_map_restores_the_full_view(page):
+    full = map_state(page)
+    for _ in range(3):
+        page.click("#mapIn")
+    page.focus("#map")
+    page.keyboard.press("ArrowLeft")
+    page.click("#mapReset")
+    assert map_state(page) == full
+
+
+def test_zoom_to_selected_area_is_disabled_until_an_area_is_chosen(page):
+    assert page.is_disabled("#mapArea")
+    page.click("#island")
+    assert not page.is_disabled("#mapArea")
+    page.click("#mapArea")
+    s = map_state(page)
+    assert s["z"] > 1
+    # the whole island box is inside the view
+    assert s["latMin"] <= 46.4 and s["latMax"] >= 51.9 and s["lonMin"] <= -59.7 and s["lonMax"] >= -52.4
+    page.click("#reset")
+    assert page.is_disabled("#mapArea")
+
+
+def test_zoom_limits(page):
+    for _ in range(40):
+        page.click("#mapIn") if not page.is_disabled("#mapIn") else None
+    s = map_state(page)
+    km_across = (s["latMax"] - s["latMin"]) * 111
+    assert page.is_disabled("#mapIn") and 8 <= km_across <= 12, km_across
+    for _ in range(40):
+        page.click("#mapOut") if not page.is_disabled("#mapOut") else None
+    assert map_state(page)["z"] == 1 and page.is_disabled("#mapOut")
+
+
+def test_panning_cannot_leave_the_data_area(page):
+    page.click("#mapIn")
+    page.click("#mapIn")
+    page.focus("#map")
+    for _ in range(200):
+        page.keyboard.press("ArrowRight")
+    s = map_state(page)
+    ext = page.evaluate("EXTENT")
+    assert ext["lonMin"] <= s["lon"] <= ext["lonMax"] and ext["latMin"] <= s["lat"] <= ext["latMax"]
+    assert s["lonMin"] < ext["lonMax"] and s["lonMax"] > ext["lonMin"]      # some data area still shows
+
+
+def test_keyboard_zoom_and_pan_on_the_focused_map(page):
+    page.focus("#map")
+    page.keyboard.press("+")
+    assert map_state(page)["z"] > 1
+    before = map_state(page)
+    page.keyboard.press("ArrowLeft")
+    after = map_state(page)
+    assert after["lon"] < before["lon"]
+    page.keyboard.press("ArrowUp")
+    assert map_state(page)["lat"] > after["lat"]
+    page.keyboard.press("-")
+    assert map_state(page)["z"] < after["z"]
+    assert page.evaluate("document.activeElement.id") == "map"
+
+
+def test_map_buttons_have_names_and_visible_focus(page):
+    for sel, name in (("#mapIn", "Zoom in"), ("#mapOut", "Zoom out")):
+        assert page.get_attribute(sel, "aria-label") == name
+    assert page.inner_text("#mapArea") == "Zoom to selected area" and page.inner_text("#mapReset") == "Reset map"
+    page.focus("#tab-area")
+    page.keyboard.press("Tab")
+    for _ in range(40):
+        if page.evaluate("document.activeElement.id") == "mapIn":
+            break
+        page.keyboard.press("Tab")
+    assert page.evaluate("document.activeElement.id") == "mapIn"
+    assert page.evaluate("getComputedStyle(document.activeElement).outlineStyle") == "solid"
+
+
+def test_wheel_zooms_around_the_pointer(browser, base):
+    ctx, pg = map_page(browser, base)
+    box = pg.locator("#map").bounding_box()
+    x, y = box["x"] + box["width"] * 0.7, box["y"] + box["height"] * 0.7
+    point = f"(() => {{ const r = cv.getBoundingClientRect(), k = cv.width / r.width; return unproj((({x}) - r.left) * k, (({y}) - r.top) * k); }})()"
+    under = pg.evaluate(point)
+    pg.mouse.move(x, y)
+    pg.mouse.wheel(0, -400)
+    pg.wait_for_timeout(50)
+    after = pg.evaluate(point)
+    assert map_state(pg)["z"] > 1
+    assert abs(after["lat"] - under["lat"]) < 0.01 and abs(after["lon"] - under["lon"]) < 0.01
+    assert pg.errors == []
+    ctx.close()
+
+
+def test_mouse_drag_pans_and_does_not_change_the_area(browser, base):
+    ctx, pg = map_page(browser, base)
+    pg.click("#mapIn")
+    before, area = map_state(pg), counts_and_area(pg)
+    box = pg.locator("#map").bounding_box()
+    pg.mouse.move(box["x"] + 200, box["y"] + 200)
+    pg.mouse.down()
+    pg.mouse.move(box["x"] + 120, box["y"] + 150, steps=5)
+    pg.mouse.up()
+    pg.wait_for_timeout(50)
+    after = map_state(pg)
+    assert after["lon"] > before["lon"] and after["lat"] < before["lat"]
+    assert counts_and_area(pg) == area
+    ctx.close()
+
+
+def test_drawing_a_box_while_zoomed_in_selects_the_right_coordinates(browser, base):
+    ctx, pg = map_page(browser, base)
+    for _ in range(3):
+        pg.click("#mapIn")
+    pg.click("#drawmode")
+    box = pg.locator("#map").bounding_box()
+    x1, y1, x2, y2 = box["x"] + 100, box["y"] + 80, box["x"] + 300, box["y"] + 260
+    expect = pg.evaluate(f"""(() => {{ const r = cv.getBoundingClientRect(), k = cv.width / r.width;
+        const a = unproj(({x1} - r.left) * k, ({y2} - r.top) * k), b = unproj(({x2} - r.left) * k, ({y1} - r.top) * k);
+        return {{latMin: a.lat, lonMin: a.lon, latMax: b.lat, lonMax: b.lon}}; }})()""")
+    pg.mouse.move(x1, y1)
+    pg.mouse.down()
+    pg.mouse.move(x2, y2, steps=6)
+    pg.mouse.up()
+    got = pg.evaluate("state.bbox")
+    for k in expect:
+        assert abs(got[k] - expect[k]) < 0.02, (k, got[k], expect[k])
+    assert abs(float(pg.input_value("#latMin")) - got["latMin"]) <= 0.005     # the boxes show 2 decimals
+    # the box is much smaller than at the full view, as it should be when zoomed in
+    assert got["latMax"] - got["latMin"] < 3
+    ctx.close()
+
+
+def test_shift_drag_draws_a_box_without_draw_mode(browser, base):
+    ctx, pg = map_page(browser, base)
+    box = pg.locator("#map").bounding_box()
+    pg.keyboard.down("Shift")
+    pg.mouse.move(box["x"] + 100, box["y"] + 100)
+    pg.mouse.down()
+    pg.mouse.move(box["x"] + 250, box["y"] + 220, steps=5)
+    pg.mouse.up()
+    pg.keyboard.up("Shift")
+    assert pg.evaluate("state.bbox.latMax - state.bbox.latMin") < 12
+    assert map_state(pg)["z"] == 1
+    ctx.close()
+
+
+def test_zoom_does_not_change_area_dates_calendar_or_downloads(page):
+    page.click("#island")
+    before = counts_and_area(page)
+    summary = page.inner_text("#areasummary")
+    page.click("#mapIn")
+    page.click("#mapArea")
+    page.focus("#map")
+    page.keyboard.press("ArrowDown")
+    page.click("#mapOut")
+    assert counts_and_area(page) == before and page.inner_text("#areasummary") == summary
+    open_tab(page, "downloads")
+    with page.expect_download() as d:
+        page.click("#dlHot")
+    lines = Path(d.value.path()).read_text().strip().splitlines()
+    assert len(lines) - 1 == int(summary.split("°W.")[1].split("cleaned")[0].replace(",", "").strip())
+
+
+def test_zoom_survives_tab_switches_and_resizing(page):
+    page.click("#mapIn")
+    page.click("#mapIn")
+    z = map_state(page)["z"]
+    for t in ("compare", "smoke", "area"):
+        open_tab(page, t)
+    assert map_state(page)["z"] == z
+    page.set_viewport_size({"width": 1000, "height": 800})
+    page.wait_for_timeout(100)
+    assert map_state(page)["z"] == z
+
+
+def test_map_on_a_phone_pinch_zooms_and_one_finger_pans_without_sideways_scroll(browser, base):
+    ctx, pg = map_page(browser, base, 390, 844, touch=True)
+    assert pg.evaluate("document.documentElement.scrollWidth") <= 390
+    box = pg.locator("#map").bounding_box()
+    cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    s = ctx.new_cdp_session(pg)
+    s.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": cx - 20, "y": cy, "id": 1}, {"x": cx + 20, "y": cy, "id": 2}]})
+    for i in range(1, 6):
+        s.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": cx - 20 - 15 * i, "y": cy, "id": 1}, {"x": cx + 20 + 15 * i, "y": cy, "id": 2}]})
+    s.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    pinched = map_state(pg)
+    assert pinched["z"] > 2
+    s.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": cx, "y": cy, "id": 3}]})
+    for i in range(1, 6):
+        s.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": cx + 10 * i, "y": cy, "id": 3}]})
+    s.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    assert map_state(pg)["lon"] < pinched["lon"]
+    assert pg.evaluate("state.bbox") == pg.evaluate("EXTENT")       # panning did not draw an area
+    assert pg.evaluate("document.documentElement.scrollWidth") <= 390
+    assert pg.errors == []
+    ctx.close()
+
+
+def test_phone_page_still_scrolls_when_touching_outside_the_map(browser, base):
+    ctx, pg = map_page(browser, base, 390, 844, touch=True)
+    pg.evaluate("window.scrollTo(0, 0)")
+    s = ctx.new_cdp_session(pg)
+    # a swipe on the header (outside the map) scrolls the page
+    s.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": 200, "y": 600}]})
+    for i in range(1, 8):
+        s.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": 200, "y": 600 - 60 * i}]})
+    s.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    pg.wait_for_timeout(300)
+    assert pg.evaluate("scrollY") > 100
+    # the map leaves part of the screen free to touch
+    assert pg.evaluate("document.getElementById('map').getBoundingClientRect().height") < 844 * 0.7
+    ctx.close()
+
+
+def test_map_dots_stay_readable_and_drawing_is_fast(page):
+    page.click("#mapIn")
+    ms = page.evaluate("(() => { const t = performance.now(); for (let i = 0; i < 5; i++) drawMap(); return (performance.now() - t) / 5; })()")
+    assert ms < 100, ms
+    painted = page.evaluate("""() => { const c = document.getElementById('map'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; }""")
+    assert painted > 1000
