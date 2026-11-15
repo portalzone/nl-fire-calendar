@@ -155,28 +155,47 @@ def test_wording_says_other_years_not_earlier_years(page):
 
 
 # ---------------------------------------------------------------- inputs: equivalence classes and boundaries
+def set_dates(pg, start=None, end=None):
+    """Type dates and press Apply, the way a user would."""
+    if start is not None:
+        pg.fill("#start", start)
+    if end is not None:
+        pg.fill("#end", end)
+    pg.click("#apply")
+
+
+def use_text_fallback(pg):
+    """Desktop Safari and Firefox show a plain text box instead of a month picker. Do the same here."""
+    pg.evaluate("for (const id of ['start', 'end']) document.getElementById(id).type = 'text'")
+    assert pg.get_attribute("#start", "type") == "text"
+
+
+def applied_range(pg):
+    return pg.evaluate("[idxToStr(state.startIdx), idxToStr(state.endIdx)]")
+
+
 @pytest.mark.parametrize("bad", ["April 2018", "04/2018", "2018-13", "2018-00", "", "abcd-ef", "2018-4"])
-def test_bad_date_strings_show_a_message_and_revert(page, bad):
-    before = page.input_value("#start")
-    page.fill("#start", bad)
-    page.dispatch_event("#start", "change")
-    assert "Dates must look like" in page.inner_text("#msg")
-    assert page.input_value("#start") == before
+def test_bad_date_strings_show_a_message_and_keep_the_last_good_dates(page, bad):
+    use_text_fallback(page)
+    before = applied_range(page)
+    set_dates(page, start=bad)
+    assert "Use the form YYYY-MM" in page.inner_text("#startErr")
+    assert page.get_attribute("#start", "aria-invalid") == "true"
+    assert applied_range(page) == before
     assert page.locator(".cell").count() >= 300
 
 
-def test_dates_outside_the_record_are_clamped(page):
-    page.fill("#start", "1990-01")
-    page.dispatch_event("#start", "change")
-    assert page.input_value("#start") == "2000-11"
+def test_dates_outside_the_record_are_rejected(page):
+    set_dates(page, start="1990-01")
+    assert "Allowed: 2000-11 to 2026-11" in page.inner_text("#startErr")
+    assert applied_range(page) == ["2000-11", "2026-11"]
 
 
-def test_start_after_end_is_swapped_and_shown(page):
-    page.fill("#start", "2020-06")
-    page.dispatch_event("#start", "change")
-    page.fill("#end", "2019-06")
-    page.dispatch_event("#end", "change")
-    assert page.input_value("#start") <= page.input_value("#end")
+def test_start_after_end_is_rejected_with_a_message(page):
+    set_dates(page, start="2020-06", end="2019-06")
+    assert "start month is after the end month" in page.inner_text("#startErr")
+    assert page.get_attribute("#start", "aria-invalid") == "true"
+    assert applied_range(page) == ["2000-11", "2026-11"]
 
 
 @pytest.mark.parametrize("field,value,fragment", [
@@ -356,10 +375,7 @@ def test_calendar_png_download_is_a_real_picture(page):
 
 
 def test_calendar_png_respects_the_selected_date_range(page):
-    page.fill("#start", "2020-01")
-    page.dispatch_event("#start", "change")
-    page.fill("#end", "2021-12")
-    page.dispatch_event("#end", "change")
+    set_dates(page, start="2020-01", end="2021-12")
     open_tab(page, "downloads")
     with page.expect_download() as d:
         page.click("#dlPng")
@@ -531,8 +547,7 @@ def test_no_hard_coded_regional_ratios_in_the_page():
 
 
 def test_png_has_no_text_cut_off_and_matches_the_range(page):
-    page.fill("#start", "2025-01")
-    page.dispatch_event("#start", "change")
+    set_dates(page, start="2025-01")
     open_tab(page, "downloads")
     with page.expect_download() as d:
         page.click("#dlPng")
@@ -667,8 +682,7 @@ def test_peak_month_result_is_shown_in_compare(page):
 
 def test_switching_tabs_keeps_area_dates_count_and_month(page):
     page.click("#island")
-    page.fill("#start", "2010-01")
-    page.dispatch_event("#start", "change")
+    set_dates(page, start="2010-01")
     page.select_option("#metric", "hotspots")
     page.click("#heat button[aria-label^='Jun 2012:']")
     before = page.evaluate("JSON.stringify([state.bbox, state.startIdx, state.endIdx, state.metric, state.sel])")
@@ -918,8 +932,7 @@ def test_picture_downloads_work_from_the_downloads_tab_opened_first(browser, bas
 
 
 def test_click_on_the_calendar_right_after_typing_a_date_is_not_lost(page):
-    page.fill("#start", "2010-01")
-    page.dispatch_event("#start", "change")
+    page.fill("#start", "2010-01")          # typed but not applied yet; leaving the box must not rebuild the grid
     page.click("#heat button[aria-label^='Jun 2012:']")      # moving focus fires "change" again
     assert page.evaluate("state.sel") == {"y": 2012, "m": 6, "maxDay": 31}
 
@@ -1402,3 +1415,120 @@ def test_map_dots_stay_readable_and_drawing_is_fast(page):
     painted = page.evaluate("""() => { const c = document.getElementById('map'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
         let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; }""")
     assert painted > 1000
+
+
+
+# ---------------------------------------------------------------- month pickers and the Apply button
+def test_date_boxes_are_month_pickers_with_the_data_limits(page):
+    for box in ("#start", "#end"):
+        assert page.get_attribute(box, "type") == "month"
+        assert page.get_attribute(box, "min") == "2000-11" and page.get_attribute(box, "max") == "2026-11"
+    assert page.inner_text("#dateRange") == "Allowed: 2000-11 to 2026-11"
+
+
+@pytest.mark.parametrize("start,end", [("2000-11", "2026-11"), ("2000-11", "2000-11"), ("2026-11", "2026-11")])
+def test_first_and_last_allowed_months_are_accepted(page, start, end):
+    set_dates(page, start=start, end=end)
+    assert applied_range(page) == [start, end]
+    assert page.inner_text("#startErr") == "" and page.inner_text("#endErr") == ""
+    assert page.get_attribute("#start", "aria-invalid") == "false"
+
+
+@pytest.mark.parametrize("box,value", [("start", "2000-10"), ("end", "2026-12"), ("start", "2026-12"), ("end", "2000-10")])
+def test_one_month_outside_the_data_is_rejected(page, box, value):
+    set_dates(page, **{box: value})
+    assert "Outside the data. Allowed: 2000-11 to 2026-11." in page.inner_text(f"#{box}Err")
+    assert page.get_attribute(f"#{box}", "aria-invalid") == "true"
+    assert applied_range(page) == ["2000-11", "2026-11"]
+    assert page.inner_text("#applied") == ""
+
+
+@pytest.mark.parametrize("start,end,ok", [("2020-06", "2020-06", True), ("2020-07", "2020-06", False), ("2020-05", "2020-06", True)])
+def test_start_after_end_boundary(page, start, end, ok):
+    set_dates(page, start=start, end=end)
+    assert (applied_range(page) == [start, end]) == ok
+    assert ("start month is after the end month" in page.inner_text("#startErr")) == (not ok)
+
+
+@pytest.mark.parametrize("value,ok", [("2018-04", True), ("2018-4", False), ("2018/04", False), ("201804", False),
+                                      ("1999-12", False), ("2030-01", False), (" 2018-04 ", True)])
+def test_text_fallback_uses_the_same_rules(page, value, ok):
+    use_text_fallback(page)
+    set_dates(page, start=value)
+    assert (applied_range(page)[0] == "2018-04") == ok
+    assert (page.get_attribute("#start", "aria-invalid") == "true") == (not ok)
+
+
+def test_text_fallback_enter_applies(page):
+    use_text_fallback(page)
+    page.fill("#start", "2015-03")
+    page.press("#start", "Enter")
+    assert applied_range(page)[0] == "2015-03"
+
+
+def test_a_fixed_error_clears_its_message(page):
+    set_dates(page, start="1990-01")
+    assert page.inner_text("#startErr")
+    set_dates(page, start="2005-01")
+    assert page.inner_text("#startErr") == "" and page.get_attribute("#start", "aria-invalid") == "false"
+
+
+def test_nothing_changes_until_apply_is_pressed(page):
+    before = page.evaluate("JSON.stringify([state.bbox, state.startIdx, state.endIdx, state.series.map(r => r.value)])")
+    page.fill("#start", "2015-01")
+    page.dispatch_event("#start", "change")
+    page.fill("#latMax", "50")
+    page.fill("#latMin", "48")
+    page.click("#h-area")                  # move focus away
+    assert page.evaluate("JSON.stringify([state.bbox, state.startIdx, state.endIdx, state.series.map(r => r.value)])") == before
+    page.click("#apply")
+    assert applied_range(page)[0] == "2015-01" and page.evaluate("state.bbox.latMax") == 50
+
+
+def test_enter_in_an_area_box_applies(page):
+    page.fill("#latMin", "48")
+    page.press("#latMin", "Enter")
+    assert page.evaluate("state.bbox.latMin") == 48
+
+
+def test_apply_button_is_on_its_own_line_below_the_controls(page):
+    apply_box = page.locator("#apply").bounding_box()
+    for sel in ("#start", "#end", "#latMax", "#lonMax", "#reset", "#island", "#drawmode"):
+        b = page.locator(sel).bounding_box()
+        assert apply_box["y"] >= b["y"] + b["height"] - 1, sel
+    assert page.inner_text("#apply") == "Apply area and dates"
+
+
+def test_apply_shows_a_confirmation_line(page):
+    assert page.inner_text("#applied") == ""
+    page.fill("#latMax", "50"); page.fill("#latMin", "48"); page.fill("#lonMin", "-58"); page.fill("#lonMax", "-54")
+    set_dates(page, start="2010-01", end="2020-12")
+    text = page.inner_text("#applied")
+    assert text.startswith("Applied:") and "48.0 to 50.0°N" in text and "2010-01 to 2020-12" in text
+
+
+def test_apply_keeps_a_visible_focus(page):
+    page.focus("#apply")
+    page.keyboard.press("Enter")
+    assert page.evaluate("document.activeElement.id") == "apply"
+    page.focus("#lonMax")
+    page.keyboard.press("Tab")
+    assert page.evaluate("document.activeElement.id") == "reset" or page.evaluate("document.activeElement.id") == "apply"
+    page.focus("#apply")
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Tab")
+    assert page.evaluate("getComputedStyle(document.activeElement).outlineStyle") == "solid"
+
+
+def test_apply_is_full_width_on_a_phone_and_no_sideways_scroll(browser, base):
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True)
+    pg = ctx.new_page()
+    pg.goto(base)
+    pg.wait_for_selector(".cell")
+    width = pg.evaluate("document.getElementById('apply').getBoundingClientRect().width")
+    parent = pg.evaluate("document.getElementById('apply').parentElement.getBoundingClientRect().width")
+    assert abs(width - parent) < 2
+    pg.fill("#start", "1990-01")
+    pg.click("#apply")
+    assert pg.inner_text("#startErr") and pg.evaluate("document.documentElement.scrollWidth") <= 390
+    ctx.close()

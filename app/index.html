@@ -77,6 +77,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 #mapwrap canvas{width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfcfd;cursor:crosshair;touch-action:pan-y}
 #mapwrap canvas{touch-action:none}
 #mapwrap canvas:focus-visible{outline:3px solid #000;outline-offset:2px}
+.fielderr{display:block;min-height:0;color:#9c2a00;font-size:13px;font-weight:600}
+.fielderr:empty{display:none}
+input[aria-invalid=true]{border-color:#9c2a00;border-width:2px}
+.applyrow{margin:10px 0 4px}
+@media(max-width:600px){.applyrow .btn{width:100%}}
 .mapctl{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 0}
 .mapctl .btn{min-width:44px}
 .btn[disabled]{opacity:.55;cursor:default}
@@ -211,14 +216,15 @@ ul.how li{margin:3px 0}
     <div class="grid">
       <div>
         <div class="row">
-          <div><label for="start">From (YYYY-MM)</label><input type="text" id="start" value="2000-11" inputmode="numeric" placeholder="2000-11" maxlength="7"></div>
-          <div><label for="end">To (YYYY-MM)</label><input type="text" id="end" value="2026-11" inputmode="numeric" placeholder="2026-11" maxlength="7"></div>
+          <div><label for="start">From (YYYY-MM)</label><input type="month" id="start" value="2000-11" placeholder="YYYY-MM" aria-describedby="startErr dateRange"><span class="fielderr" id="startErr" aria-live="polite"></span></div>
+          <div><label for="end">To (YYYY-MM)</label><input type="month" id="end" value="2026-11" placeholder="YYYY-MM" aria-describedby="endErr dateRange"><span class="fielderr" id="endErr" aria-live="polite"></span></div>
           <div><label for="metric">Count</label>
             <select id="metric">
               <option value="cells">Fire cells</option>
               <option value="hotspots">Raw hotspots</option>
             </select></div>
         </div>
+        <p class="hint" id="dateRange" style="margin:-4px 0 8px">Allowed: 2000-11 to 2026-11</p>
         <div class="row">
           <div><label for="latMax">North latitude</label><input type="number" id="latMax" step="0.1"></div>
           <div><label for="latMin">South latitude</label><input type="number" id="latMin" step="0.1"></div>
@@ -226,11 +232,12 @@ ul.how li{margin:3px 0}
           <div><label for="lonMax">East longitude (negative)</label><input type="number" id="lonMax" step="0.1"></div>
         </div>
         <p style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 4px">
-          <button class="btn" id="apply">Apply area</button>
           <button class="btn alt" id="reset">Reset to all of NL</button>
           <button class="btn alt" id="island">Island of Newfoundland</button>
           <button class="btn alt" id="drawmode" aria-pressed="false">Draw area on map: off</button>
         </p>
+        <p class="applyrow"><button class="btn" id="apply" type="button">Apply area and dates</button></p>
+        <p class="hint" id="applied" aria-live="polite"></p>
         <div id="msg" role="alert"></div>
         <p class="hint" id="areasummary" aria-live="polite"></p>
         <p class="hint">To draw an area on the map, hold Shift and drag, or turn on "Draw area on map" and drag (this also works by touch). <b>Fire cells</b> counts each 0.1&deg; map cell with a detection on a given day once, so the finer VIIRS pixels do not inflate the count. Raw hotspots count every detection.</p>
@@ -394,7 +401,7 @@ async function init(){
   state.bbox={...EXTENT};
   $("eranote").textContent=`Months before ${MONTHS[VIIRS_FIRST%12]} ${Math.floor(VIIRS_FIRST/12)} are MODIS counts scaled to VIIRS level; later months are VIIRS counts as observed. Each month is compared only with years of its own kind.`;
   $("annualnote").textContent=`Orange: MODIS scaled to VIIRS level. Blue: VIIRS observed from ${idxToStr(VIIRS_FIRST)}. Pale bars: before July 2002 (Terra only). The latest months come from near-real-time files, which can be revised.`;
-  bind();writeInputs();setupMap();selectLatest(false);recompute();showTab(state.tab);
+  bind();writeInputs();setupDateBoxes();setupMap();selectLatest(false);recompute();showTab(state.tab);
 }
 
 /* ---------- aggregation ---------- */
@@ -800,15 +807,49 @@ function drawMap(drag){
 /* ---------- inputs, downloads, keyboard ---------- */
 function writeInputs(){const b=state.bbox;$("latMax").value=b.latMax.toFixed(2);$("latMin").value=b.latMin.toFixed(2);$("lonMin").value=b.lonMin.toFixed(2);$("lonMax").value=b.lonMax.toFixed(2);}
 function download(name,text){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:"text/csv"}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
-function applyRange(){
-  const re=/^\d{4}-(0[1-9]|1[0-2])$/,sv=$("start").value.trim(),ev=$("end").value.trim();
-  if(!re.test(sv)||!re.test(ev)){setMsg("Dates must look like 2018-04 (year, dash, two-digit month).");$("start").value=idxToStr(state.startIdx);$("end").value=idxToStr(state.endIdx);return;}
-  let a=Math.max(strToIdx(sv),SERIES_START),b=Math.min(strToIdx(ev),END_IDX);
-  if(a>b)[a,b]=[b,a];
-  // the change event can fire twice (on Enter and again on blur); only rebuild when the range really changed,
-  // otherwise a click on the calendar right after typing a date is lost while the grid is rebuilt
-  if(a===state.startIdx&&b===state.endIdx){setMsg("");$("start").value=idxToStr(a);$("end").value=idxToStr(b);return;}
-  setMsg("");state.startIdx=a;state.endIdx=b;$("start").value=idxToStr(a);$("end").value=idxToStr(b);renderAll();
+const MONTH_RE=/^\d{4}-(0[1-9]|1[0-2])$/;
+/* check both date boxes; return [startIdx, endIdx] or null. Messages go next to each box. */
+function checkDates(){
+  const lo=SERIES_START,hi=END_IDX,allowed=`Allowed: ${idxToStr(lo)} to ${idxToStr(hi)}.`;
+  const box={start:$("start"),end:$("end")},err={start:"",end:""},val={};
+  for(const k of ["start","end"]){
+    const v=box[k].value.trim();
+    if(!MONTH_RE.test(v))err[k]="Use the form YYYY-MM, for example 2018-04.";
+    else{val[k]=strToIdx(v);if(val[k]<lo||val[k]>hi)err[k]=`Outside the data. ${allowed}`;}
+  }
+  if(!err.start&&!err.end&&val.start>val.end)err.start="The start month is after the end month.";
+  for(const k of ["start","end"]){$(k+"Err").textContent=err[k];box[k].setAttribute("aria-invalid",err[k]?"true":"false");}
+  return err.start||err.end?null:[val.start,val.end];
+}
+/* read and check the area boxes; return the box or null (message in #msg) */
+function checkArea(){
+  const f=["latMax","latMin","lonMin","lonMax"],raw=f.map(id=>$(id).value.trim());
+  if(raw.some(v=>v==="")){setMsg("Fill in all four boxes.");return null;}
+  const [latMax,latMin,lonMin,lonMax]=raw.map(Number);
+  if([latMax,latMin,lonMin,lonMax].some(v=>!Number.isFinite(v))){setMsg("Area values must be numbers.");return null;}
+  if(Math.abs(latMax)>90||Math.abs(latMin)>90||Math.abs(lonMin)>180||Math.abs(lonMax)>180){setMsg("Latitude must be between -90 and 90, longitude between -180 and 180.");return null;}
+  if(lonMin>0||lonMax>0){setMsg("Longitude must be negative here, because Newfoundland and Labrador are west of Greenwich (for example -58).");return null;}
+  if(latMin>=latMax||lonMin>=lonMax){setMsg("South must be below north, and west must be left of east (for example -58 is west of -54).");return null;}
+  return {latMax,latMin,lonMin,lonMax};
+}
+/* the Apply button (or Enter in a box): nothing changes unless both the dates and the area are valid */
+function applyControls(){
+  const d=checkDates(),b=checkArea();
+  if(!d){if(b)setMsg("");$("applied").textContent="";return false;}
+  if(!b){$("applied").textContent="";return false;}
+  setMsg("");state.startIdx=d[0];state.endIdx=d[1];state.bbox=b;recompute();
+  $("applied").textContent=`Applied: ${areaName()}, ${idxToStr(d[0])} to ${idxToStr(d[1])}.`;
+  return true;
+}
+function setupDateBoxes(){
+  const lo=idxToStr(SERIES_START),hi=idxToStr(END_IDX);
+  for(const id of ["start","end"]){
+    const el=$(id);el.min=lo;el.max=hi;
+    // browsers without a month picker (desktop Safari, Firefox) show a text box: same rules, typed as YYYY-MM
+    if(el.type!=="month"){el.setAttribute("inputmode","numeric");el.maxLength=7;}
+  }
+  $("start").value=idxToStr(state.startIdx);$("end").value=idxToStr(state.endIdx);
+  $("dateRange").textContent=`Allowed: ${lo} to ${hi}`;
 }
 function downloadBlob(name,blob){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 function downloadSVG(sel,name){
@@ -911,20 +952,13 @@ function bindTabs(){
   window.addEventListener("popstate",follow);window.addEventListener("hashchange",follow);
 }
 function bind(){
-  $("apply").onclick=()=>{
-    const f=["latMax","latMin","lonMin","lonMax"],raw=f.map(id=>$(id).value.trim());
-    if(raw.some(v=>v==="")){setMsg("Fill in all four boxes.");return;}
-    const [latMax,latMin,lonMin,lonMax]=raw.map(Number);
-    if([latMax,latMin,lonMin,lonMax].some(v=>!Number.isFinite(v))){setMsg("Area values must be numbers.");return;}
-    if(Math.abs(latMax)>90||Math.abs(latMin)>90||Math.abs(lonMin)>180||Math.abs(lonMax)>180){setMsg("Latitude must be between -90 and 90, longitude between -180 and 180.");return;}
-    if(lonMin>0||lonMax>0){setMsg("Longitude must be negative here, because Newfoundland and Labrador are west of Greenwich (for example -58).");return;}
-    if(latMin>=latMax||lonMin>=lonMax){setMsg("South must be below north, and west must be left of east (for example -58 is west of -54).");return;}
-    setMsg("");state.bbox={latMax,latMin,lonMin,lonMax};recompute();};
+  $("apply").onclick=applyControls;
+  for(const id of ["start","end","latMax","latMin","lonMin","lonMax"])
+    $(id).addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();applyControls();}});
   $("island").onclick=()=>{setMsg("");state.bbox={...ISLAND};writeInputs();recompute();};
   $("coMeasure").onchange=renderCO;
   $("reset").onclick=()=>{setMsg("");state.bbox={...EXTENT};writeInputs();recompute();};
   $("drawmode").onclick=()=>{state.drawMode=!state.drawMode;$("drawmode").setAttribute("aria-pressed",state.drawMode);$("drawmode").textContent="Draw area on map: "+(state.drawMode?"on":"off");$("map").classList.toggle("draw",state.drawMode);};
-  $("start").onchange=applyRange;$("end").onchange=applyRange;
   $("metric").onchange=()=>{state.metric=$("metric").value;recompute();};
   $("dlPng").onclick=downloadCalendarPNG;
   $("dlAnnualSvg").onclick=()=>downloadSVG("#annual svg","nl_fire_yearly_totals.svg");
